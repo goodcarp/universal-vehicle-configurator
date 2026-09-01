@@ -229,6 +229,49 @@ describe("real configurator Site Tools", () => {
     expect(dependencies.store.getState().resolved.specs.range_mi).toBe(330);
   });
 
+  it("sets explicit buyer context without inferring private facts", async () => {
+    const dependencies = setup();
+    const tool = toolsByName(dependencies).get("set_vehicle_buyer_context");
+
+    const changed = await tool?.execute({
+      expectedRevision: 1,
+      patch: {
+        evExperience: "new",
+        state: "CO",
+        utility: "xcel",
+        chargingSituation: "home_l2_possible",
+        useCases: ["road_trip", "snow"],
+        priorities: ["range", "price"],
+        financing: true,
+        crossShopIds: ["model_y", "ioniq_5"],
+      },
+    });
+
+    expect(changed).toEqual(
+      expect.objectContaining({
+        ok: true,
+        revision: 2,
+        buyerContext: {
+          evExperience: "new",
+          state: "CO",
+          utility: "xcel",
+          chargingSituation: "home_l2_possible",
+          useCases: ["road_trip", "snow"],
+          priorities: ["range", "price"],
+          financing: true,
+          crossShopIds: ["model_y", "ioniq_5"],
+        },
+        incentives: expect.objectContaining({ potentiallyApplicable: expect.any(Array) }),
+      }),
+    );
+    expect(dependencies.store.getState().domain.buyerContext.state).toBe("CO");
+
+    expect(() => tool?.execute({
+      expectedRevision: 2,
+      patch: { state: "Colorado" },
+    })).toThrow("uppercase US postal code or unknown");
+  });
+
   it("interrupts an in-flight staged transaction after the latest committed stage", async () => {
     const dependencies = setup(10_000);
     const tools = toolsByName(dependencies);

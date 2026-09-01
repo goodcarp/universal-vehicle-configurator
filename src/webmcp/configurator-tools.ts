@@ -1,5 +1,6 @@
 import type {
   BuyerContext,
+  BuyerContextInput,
   CanonicalSelections,
   Catalog,
   CatalogGroup,
@@ -22,6 +23,7 @@ export const CONFIGURATOR_TOOL_NAMES = [
   "interrupt_vehicle_configuration_transaction",
   "undo_vehicle_configuration_transaction",
   "present_vehicle_configuration",
+  "set_vehicle_buyer_context",
 ] as const;
 
 export type ConfiguratorToolName = (typeof CONFIGURATOR_TOOL_NAMES)[number];
@@ -91,6 +93,18 @@ const FOCUS_TARGETS = [
   "wheels",
   "utility",
 ] as const;
+const EV_EXPERIENCES = ["new", "familiar", "owner", "unknown"] as const;
+const CHARGING_SITUATIONS = [
+  "home_l2_possible",
+  "home_l1",
+  "routine_public",
+  "poor_fit",
+  "unknown",
+] as const;
+const USE_CASES = ["road_trip", "towing", "commute", "snow"] as const;
+const PRIORITIES = ["range", "delivery", "price", "performance", "comfort"] as const;
+const CROSS_SHOPS = ["model_y", "ioniq_5"] as const;
+const UTILITIES = ["xcel", "unknown"] as const;
 
 const defaultDependencies: ConfiguratorToolsDependencies = {
   store: configuratorStore,
@@ -208,6 +222,89 @@ function cloneBuyerContext(context: BuyerContext): BuyerContext {
     priorities: [...context.priorities],
     crossShopIds: [...context.crossShopIds],
   };
+}
+
+function parseBuyerContextPatch(value: unknown, toolName: string): BuyerContextInput {
+  const patch = assertRecord(value, toolName);
+  const allowed = [
+    "evExperience",
+    "state",
+    "utility",
+    "chargingSituation",
+    "useCases",
+    "priorities",
+    "financing",
+    "crossShopIds",
+  ] as const;
+  assertOnlyKeys(patch, allowed, toolName);
+  if (Object.keys(patch).length < 1) {
+    throw new TypeError(`${toolName} requires at least one buyer-context field.`);
+  }
+
+  const parsed: BuyerContextInput = {};
+  if (patch.evExperience !== undefined) {
+    if (!EV_EXPERIENCES.includes(patch.evExperience as BuyerContext["evExperience"])) {
+      throw new TypeError(`${toolName} received an unsupported evExperience.`);
+    }
+    parsed.evExperience = patch.evExperience as BuyerContext["evExperience"];
+  }
+  if (patch.state !== undefined) {
+    if (typeof patch.state !== "string" || !/^(unknown|[A-Z]{2})$/u.test(patch.state)) {
+      throw new TypeError(`${toolName} requires state as an uppercase US postal code or unknown.`);
+    }
+    parsed.state = patch.state;
+  }
+  if (patch.utility !== undefined) {
+    if (!UTILITIES.includes(patch.utility as BuyerContext["utility"])) {
+      throw new TypeError(`${toolName} received an unsupported utility.`);
+    }
+    parsed.utility = patch.utility as BuyerContext["utility"];
+  }
+  if (patch.chargingSituation !== undefined) {
+    if (!CHARGING_SITUATIONS.includes(
+      patch.chargingSituation as BuyerContext["chargingSituation"],
+    )) {
+      throw new TypeError(`${toolName} received an unsupported chargingSituation.`);
+    }
+    parsed.chargingSituation = patch.chargingSituation as BuyerContext["chargingSituation"];
+  }
+  if (patch.useCases !== undefined) {
+    if (
+      !Array.isArray(patch.useCases) ||
+      patch.useCases.some((item) => !USE_CASES.includes(item as BuyerContext["useCases"][number])) ||
+      new Set(patch.useCases).size !== patch.useCases.length
+    ) {
+      throw new TypeError(`${toolName} received unsupported or duplicate useCases.`);
+    }
+    parsed.useCases = [...patch.useCases] as BuyerContext["useCases"];
+  }
+  if (patch.priorities !== undefined) {
+    if (
+      !Array.isArray(patch.priorities) ||
+      patch.priorities.some((item) => !PRIORITIES.includes(item as BuyerContext["priorities"][number])) ||
+      new Set(patch.priorities).size !== patch.priorities.length
+    ) {
+      throw new TypeError(`${toolName} received unsupported or duplicate priorities.`);
+    }
+    parsed.priorities = [...patch.priorities] as BuyerContext["priorities"];
+  }
+  if (patch.financing !== undefined) {
+    if (typeof patch.financing !== "boolean" && patch.financing !== "unknown") {
+      throw new TypeError(`${toolName} requires financing as a boolean or unknown.`);
+    }
+    parsed.financing = patch.financing;
+  }
+  if (patch.crossShopIds !== undefined) {
+    if (
+      !Array.isArray(patch.crossShopIds) ||
+      patch.crossShopIds.some((item) => !CROSS_SHOPS.includes(item as BuyerContext["crossShopIds"][number])) ||
+      new Set(patch.crossShopIds).size !== patch.crossShopIds.length
+    ) {
+      throw new TypeError(`${toolName} received unsupported or duplicate crossShopIds.`);
+    }
+    parsed.crossShopIds = [...patch.crossShopIds] as BuyerContext["crossShopIds"];
+  }
+  return parsed;
 }
 
 function compactConfiguration(state: ConfiguratorStoreState) {
@@ -660,6 +757,74 @@ export function createConfiguratorToolDefinitions(
     },
   };
 
+  const setBuyerContext: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[7],
+    title: "Set vehicle buyer context",
+    description:
+      "Set only buyer facts the person has actually provided—EV experience, state, utility, charging access, use cases, priorities, financing, and cross-shopped vehicles—so configuration guidance and incentive results can adapt without guessing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        expectedRevision: expectedRevisionSchema,
+        patch: {
+          type: "object",
+          properties: {
+            evExperience: { type: "string", enum: EV_EXPERIENCES },
+            state: { type: "string", pattern: "^(unknown|[A-Z]{2})$" },
+            utility: { type: "string", enum: UTILITIES },
+            chargingSituation: { type: "string", enum: CHARGING_SITUATIONS },
+            useCases: {
+              type: "array",
+              items: { type: "string", enum: USE_CASES },
+              uniqueItems: true,
+            },
+            priorities: {
+              type: "array",
+              items: { type: "string", enum: PRIORITIES },
+              uniqueItems: true,
+            },
+            financing: {
+              anyOf: [
+                { type: "boolean" },
+                { type: "string", enum: ["unknown"] },
+              ],
+            },
+            crossShopIds: {
+              type: "array",
+              items: { type: "string", enum: CROSS_SHOPS },
+              uniqueItems: true,
+            },
+          },
+          minProperties: 1,
+          additionalProperties: false,
+        },
+      },
+      required: ["expectedRevision", "patch"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, untrustedContentHint: false },
+    execute: (input, options) => {
+      throwIfAborted(options?.signal);
+      const record = assertRecord(input, CONFIGURATOR_TOOL_NAMES[7]);
+      assertOnlyKeys(record, ["expectedRevision", "patch"], CONFIGURATOR_TOOL_NAMES[7]);
+      const result = mutations.setBuyerContext({
+        expectedRevision: parseExpectedRevision(
+          record.expectedRevision,
+          CONFIGURATOR_TOOL_NAMES[7],
+        ),
+        patch: parseBuyerContextPatch(record.patch, CONFIGURATOR_TOOL_NAMES[7]),
+        source: "agent",
+      });
+      if (!result.ok) return result;
+      const next = store.getState();
+      return {
+        ...result,
+        buyerContext: cloneBuyerContext(next.domain.buyerContext),
+        incentives: next.resolved.incentives,
+      };
+    },
+  };
+
   return [
     getConfiguration,
     listOptions,
@@ -668,6 +833,7 @@ export function createConfiguratorToolDefinitions(
     interruptTransaction,
     undoTransaction,
     presentConfiguration,
+    setBuyerContext,
   ];
 }
 
