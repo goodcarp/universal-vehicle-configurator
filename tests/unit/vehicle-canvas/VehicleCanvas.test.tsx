@@ -44,6 +44,17 @@ describe("VehicleCanvas", () => {
     expect(screen.getByRole("button", { name: "Profile" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Wheel" })).toBeVisible();
     expect(screen.getByText("Drag to explore")).toBeVisible();
+    expect(screen.getByRole("region", { name: "Interactive vehicle configurator" }))
+      .toHaveAttribute("data-renderer", "authored_2_5d");
+  });
+
+  it("carries configuration-linked accessories into the render contract", () => {
+    const { rerender } = render(<VehicleCanvas accessories={{ towHitch: false }} />);
+    const canvas = screen.getByRole("region", { name: "Interactive vehicle configurator" });
+
+    expect(canvas).not.toHaveAttribute("data-tow-hitch");
+    rerender(<VehicleCanvas accessories={{ towHitch: true }} />);
+    expect(canvas).toHaveAttribute("data-tow-hitch", "true");
   });
 
   it("visibly reflects parent-driven paint and wheel selections", () => {
@@ -163,7 +174,7 @@ describe("VehicleCanvas", () => {
   it("supports keyboard pan, blueprint toggle, and reset", () => {
     const onViewportChange = vi.fn();
     render(<VehicleCanvas defaultViewPreset="profile" onViewportChange={onViewportChange} />);
-    const viewport = screen.getByRole("application", { name: /Original compact electric SUV concept/i });
+    const viewport = screen.getByRole("application", { name: /Licensed compact-SUV reference model/i });
 
     fireEvent.keyDown(viewport, { key: "ArrowRight" });
     expect(onViewportChange).toHaveBeenLastCalledWith(expect.objectContaining({ panX: 1.5 }));
@@ -179,7 +190,7 @@ describe("VehicleCanvas", () => {
   it("pans from touch-style pointer input without stealing control clicks", () => {
     const onViewportChange = vi.fn();
     render(<VehicleCanvas defaultViewPreset="profile" onViewportChange={onViewportChange} />);
-    const viewport = screen.getByRole("application", { name: /Original compact electric SUV concept/i });
+    const viewport = screen.getByRole("application", { name: /Licensed compact-SUV reference model/i });
     Object.defineProperty(viewport, "getBoundingClientRect", {
       configurable: true,
       value: () => ({

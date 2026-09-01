@@ -1,60 +1,102 @@
 # Vehicle asset gate and provenance
 
-Audit date: 2026-08-31 (America/New_York)
+Audit date: 2026-09-01 (America/New_York)
 
 ## Gate result
 
-The approved runtime source is an **original authored 2.5D safety pack**. No
-third-party GLB, manufacturer model, manufacturer photography, logo, badge, or
-manufacturer texture is bundled in this repository.
+The shipped primary hero is the **Volvo EX30 2024** GLB distributed
+in the OpenX Assets August 2025 release. It is a substantially stronger modern
+crossover mesh than the current code-native model: 4,597,256 bytes, 59,354
+triangles, 15 meshes, separate wheel and light nodes, and named PBR body, glass,
+plastic, mirror, and trim materials.
 
-The live-3D branch is **not approved yet**. The best timeboxed candidate has a
-clear CC BY 4.0 listing, but its official download requires an authenticated
-Sketchfab session, so the actual file could not be acquired and its paint
-material, removable branding, wheel hierarchy, normals, and first-frame load
-could not be verified. Scraping viewer payloads or bypassing the official
-download was explicitly rejected.
+The exact audited binary is deployed at
+`public/models/openx-volvo-ex30-2024.glb`. It passed runtime loading and visual
+verification. The original code-native procedural 3D vehicle remains the
+in-scene loading and asset-error fallback.
 
-Approved facts:
+The original authored 2.5D safety pack remains in the product for Blueprint and
+Interior presentations and graceful fallback when WebGL is unsupported, fails,
+or loses its context. Its provenance and integrity record remain below.
 
-- first-frame fallback: `public/images/showroom-fallback.webp`
-- strict side layer and blueprint layer: registered 1600×900 canvases; the
-  blueprint matte is intersected with the reviewed side silhouette and retains
-  at least 96% silhouette coverage without extending beyond it
-- body paint: dedicated representative 2D mask, not a claimed live material
-- wheel treatment: a representative inset with stable normalized wheel anchors,
-  not a claimed mesh swap
-- wheel centers: all six visible shipped hubs have deliberately plain concentric
-  discs; generator-made pseudo-lettering is covered during the deterministic
-  build
-- identity: original compact electric SUV concept, always described as
-  unofficial and not affiliated with a manufacturer
+## Selected primary GLB: provenance and permitted use
 
-`src/scene/scene-manifest.ts` is the runtime source of truth for those claims.
+- **Asset:** `Volvo EX30` by Mehdi Lagzouli / LagzDesign (2023), adapted and
+  packaged for OpenX Assets by Dogan Ulus (2025).
+- **Original model page:**
+  [Sketchfab — Volvo EX30](https://sketchfab.com/3d-models/volvo-ex30-c5be588ea33d44cc8d2690ffdba389a4).
+  The author describes the source model as having no manufacturer mark.
+- **OpenX source folder:**
+  [m1_volvo_ex30_2024](https://github.com/vevalabs/openx-assets/tree/main/src/vehicles/main/m1_volvo_ex30_2024).
+- **OpenX release page:**
+  [OpenX Assets August 2025 Edition](https://github.com/vevalabs/openx-assets/releases/tag/20250821).
+- **Direct, credential-free release archive:**
+  [openx-assets.zip](https://github.com/vevalabs/openx-assets/releases/download/20250821/openx-assets.zip).
+  The browser-ready file is
+  `model3d/m1_volvo_ex30_2024/m1_volvo_ex30_2024.glb` inside that archive.
+- **Direct source-form download:**
+  [m1_volvo_ex30_2024.blend](https://media.githubusercontent.com/media/vevalabs/openx-assets/main/src/vehicles/main/m1_volvo_ex30_2024/m1_volvo_ex30_2024.blend).
+- **Repository rights record:**
+  [src/vehicles/main/REUSE.toml](https://raw.githubusercontent.com/vevalabs/openx-assets/main/src/vehicles/main/REUSE.toml).
+- **License expression:**
+  [`MPL-2.0`](https://www.mozilla.org/MPL/2.0/) **AND**
+  [`CC-BY-4.0`](https://creativecommons.org/licenses/by/4.0/).
+- **Audited GLB SHA-256:**
+  `6c9a190919432a379671c4a72fce7b9d575560b74de612b2d220f09328e9db4d`.
 
-## Timeboxed live-model candidate
+The shipped integration keeps the downloaded geometry unchanged. Configurator
+paint changes are runtime material-color overrides and are not written back to
+or redistributed as a modified GLB. If geometry is changed later, the project
+must identify the modification, preserve the CC BY attribution, and make the
+corresponding modified source form available as required by MPL 2.0.
 
-| Field | Recorded value |
-| --- | --- |
-| Title | Lowpoly Generic SUV |
-| Creator | mk2design |
-| Primary page | <https://sketchfab.com/3d-models/lowpoly-generic-suv-edc994ad28ed438cb365c0e0389ac177> |
-| Official metadata | <https://api.sketchfab.com/v3/models/edc994ad28ed438cb365c0e0389ac177> |
-| Listed license | Creative Commons Attribution 4.0 |
-| License text | <https://creativecommons.org/licenses/by/4.0/> |
-| Listing metadata | downloadable, 8,024 faces, 5,230 vertices, 5 materials, 5 textures |
-| Runtime decision | not bundled; blocked pending authorized download plus topology/material audit |
+This is an unofficial, unaffiliated hackathon visualization. Neither the
+original artist nor OpenX Assets endorses it. The copyright licenses do not
+grant rights in Volvo trademarks, product names, trade dress, badges, or logos;
+`Volvo EX30` appears here only to identify and credit the source. The deployed
+experience must present the unbadged mesh as a representative compact electric
+crossover, must not imply Volvo or Rivian sponsorship, and must not describe it
+as a manufacturer-accurate Rivian R2.
 
-Two clearly licensed fallbacks were also considered but intentionally not used:
-Quaternius' CC0 Cars Pack and Kenney's CC0 Car Kit. Both have usable separate
-vehicle parts, but their low-poly/toy presentation does not clear the PRD's
-premium hero-quality gate. Khronos' CC BY 4.0 CarConcept is technically clean but
-is a branded low sports concept rather than a compact SUV. No files from any of
-those sources are present here.
+## Current live 3D and fallback capability
+
+- Angle, Profile, and Wheel showroom views use a dynamically loaded React Three
+  Fiber/WebGL scene with studio lighting, physically based materials, contact
+  shadows, and smooth camera presets.
+- Pointer and touch gestures orbit and dolly the camera. Keyboard orbit/reset,
+  reduced-motion camera cuts, and focus presets for paint, wheels, charge port,
+  and rear utility are implemented.
+- Paint changes update the verified `Body` material. Wheel selections adjust
+  verified rim/inset materials and representative rim scale while preserving the
+  stock tire geometry. The tow option adds or removes separate code-native hitch
+  geometry because the source GLB contains no hitch node.
+- Blueprint and Interior remain authored presentations. The configurator stays
+  usable through the authored 2.5D fallback if live rendering is unavailable.
+- Human controls and Site Tools write to the same configuration and presentation
+  state, so agent changes are reflected by the live scene.
+
+`src/scene/LicensedVehicleModel.tsx`,
+`src/scene/licensed-vehicle-mapping.ts`,
+`src/scene/LiveVehicleViewport.tsx`, and
+`src/features/vehicle-canvas/VehicleCanvas.tsx` are the runtime sources of truth
+for these claims. `src/scene/VehicleModel.tsx` is the procedural 3D fallback;
+`src/scene/scene-manifest.ts` records both the licensed primary and authored
+fallback layers.
+
+## Rejected external vehicle models
+
+| Candidate | License | Decision |
+| --- | --- | --- |
+| [Sketchfab DevPoly Rivian electric SUV](https://sketchfab.com/3d-models/rivian-electric-suv-car-3d-model-100721982719453aaf5281a0f95c9294) | Listed CC BY 4.0 and downloadable | Not acquired or bundled. The authorized original-file download required an authenticated Sketchfab session, and the preview did not clear the premium hero-quality bar. |
+| [Printables Tiny Rivian R2 Mini Cars Series](https://www.printables.com/model/1779949-tiny-rivian-r2-mini-cars-series) | CC BY-NC-ND 4.0 | Rejected. NoDerivatives is unsuitable for the topology, material, and browser-performance modifications a live configurator requires. |
+| [Kenney Car Kit](https://kenney.nl/assets/car-kit) | CC0 1.0 | Rejected. Browser-friendly, but its stylized toy-like treatment did not clear the premium hero-quality bar. |
+| [Khronos CarConcept](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CarConcept) | CC BY 4.0 | Rejected. The low sports-concept body is wrong for the compact-SUV experience, and its roughly 10.3 MB, 213,347-triangle GLB is heavier than the target hero budget. |
+
+No files from these candidates are present in the repository.
 
 ## Rights status of the shipped art
 
-The three source renders below were created for this project with OpenAI's
+The three authored 2.5D safety-pack renders below were created for this project with OpenAI's
 built-in image-generation tool. They are not copied from a manufacturer and are
 not released under CC0 or CC BY. Their use is governed by the applicable OpenAI
 terms; as between the user and OpenAI, output ownership is addressed in the

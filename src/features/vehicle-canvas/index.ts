@@ -1,6 +1,7 @@
 export { VehicleCanvas } from "./VehicleCanvas";
 export type {
   VehicleAssetStatus,
+  VehicleAccessorySelection,
   VehicleCanvasMode,
   VehicleCanvasProps,
   VehicleHotspot,

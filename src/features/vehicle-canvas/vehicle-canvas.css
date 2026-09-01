@@ -114,6 +114,37 @@
   transition: background 500ms ease, opacity 500ms ease;
 }
 
+.vc-live-layer {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.vehicle-canvas[data-renderer="live_3d"] .vc-live-layer {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.vehicle-canvas[data-renderer="live_3d"][data-mode="showroom"] .vc-object {
+  z-index: 6;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.vehicle-canvas[data-renderer="live_3d"][data-mode="showroom"] .vc-angle-view,
+.vehicle-canvas[data-renderer="live_3d"][data-mode="showroom"] .vc-profile-view {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.vehicle-canvas[data-renderer="live_3d"] .vc-hotspot {
+  pointer-events: auto;
+}
+
 .vehicle-canvas[data-mode="blueprint"] .vc-environment__light {
   background: rgba(94, 218, 255, 0.12);
 }
@@ -199,6 +230,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   padding: 0.56rem 0.78rem;
   border: 0;
   border-radius: 999px;
@@ -259,6 +292,26 @@
   border-radius: 50%;
   background: #62a790;
   box-shadow: 0 0 0 0.22rem rgba(98, 167, 144, 0.13);
+}
+
+.vc-model-attribution {
+  position: absolute;
+  z-index: 11;
+  top: 6.35rem;
+  left: 1.2rem;
+  color: rgba(23, 33, 29, 0.48);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.45rem;
+  letter-spacing: 0.055em;
+  text-decoration-color: rgba(23, 33, 29, 0.2);
+  text-underline-offset: 0.18rem;
+  text-transform: uppercase;
+  transition: color 180ms ease;
+}
+
+.vc-model-attribution:hover,
+.vc-model-attribution:focus-visible {
+  color: rgba(23, 33, 29, 0.78);
 }
 
 .vehicle-canvas[data-mode="blueprint"] .vc-status {
@@ -987,8 +1040,8 @@
   top: var(--anchor-y);
   display: grid;
   place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.75rem;
+  height: 2.75rem;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -1356,7 +1409,8 @@
   }
 
   .vc-hud__identity > span:last-child,
-  .vc-status {
+  .vc-status,
+  .vc-model-attribution {
     display: none;
   }
 
@@ -1366,7 +1420,9 @@
   }
 
   .vc-mode-switch button {
-    padding: 0.48rem;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
     font-size: 0;
   }
 
@@ -1387,8 +1443,8 @@
   }
 
   .vc-hotspot {
-    width: 2rem;
-    height: 2rem;
+    left: clamp(1.6rem, var(--anchor-x), calc(100% - 1.6rem));
+    top: clamp(1.6rem, var(--anchor-y), calc(100% - 1.6rem));
   }
 
   .vc-focus-card {

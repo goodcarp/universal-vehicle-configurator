@@ -225,6 +225,7 @@ export function App() {
             paint={paint}
             wheel={wheel}
             interior={interior}
+            accessories={{ towHitch: Boolean(resolved.specs.tow_hitch) }}
             mode={canvasMode}
             viewPreset={viewPreset}
             activeHotspotId={activeHotspot}

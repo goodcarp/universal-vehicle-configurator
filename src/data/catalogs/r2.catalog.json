@@ -1041,19 +1041,29 @@
   },
   "scene": {
     "model": {
-      "src": "TBD",
-      "format": "glTF",
-      "license": "TBD — require CC0 or CC-BY",
-      "attribution": "TBD",
-      "status": "unsourced: day-one task is finding a CC0/CC-BY midsize-SUV mesh; semantic part map below is mesh-agnostic"
+      "src": "/models/openx-volvo-ex30-2024.glb",
+      "format": "glTF 2.0 binary (GLB)",
+      "license": "MPL-2.0 AND CC-BY-4.0",
+      "attribution": "Original 2023 Mehdi Lagzouli / LagzDesign; OpenX adaptation © 2025 Dogan Ulus",
+      "source": "OpenX Assets release 20250821",
+      "sourceUrl": "https://github.com/vevalabs/openx-assets/tree/main/src/vehicles/main/m1_volvo_ex30_2024",
+      "sha256": "6c9a190919432a379671c4a72fce7b9d575560b74de612b2d220f09328e9db4d",
+      "status": "shipped licensed reference geometry with procedural load/error fallback; represents a 2024 Volvo EX30 and must not be described as R2 geometry",
+      "representsConfiguredVehicle": false
     },
     "parts": {
-      "body_paint": "body_shell",
-      "wheel_fl": "wheel_front_left",
-      "hitch": "rear_hitch",
-      "frunk": "front_trunk",
-      "charge_port": "charge_port",
-      "interior_shell": "interior"
+      "body_paint": "Object_12 / material Body",
+      "body_glass": "Object_12_3 / material BodyGlass",
+      "body_plastic": "Object_12_4 / material BodyPlastic",
+      "wheel_fl": "Wheel_0_1 / rim Material.011 / inset Material.012 / tire MA_tire_003.001",
+      "wheel_fr": "Wheel_0_0 / rim Material.011 / inset Material.012 / tire MA_tire_003.001",
+      "wheel_rl": "Wheel_1_1 / rim Material.011 / inset Material.012 / tire MA_tire_003.001",
+      "wheel_rr": "Wheel_1_0 / rim Material.011 / inset Material.012 / tire MA_tire_003.001",
+      "front_lights": "Light_Low_Beam_Left_0 + Light_Low_Beam_Right_0 / Material.009",
+      "rear_lights": "Light_Brake_* + Light_Tail_* / Material.007",
+      "hitch": "ConfiguredTowHitch runtime overlay; absent from source GLB",
+      "charge_port": "context focus only; no isolated source GLB node",
+      "interior_shell": "not present in source GLB"
     },
     "cameras": [
       {

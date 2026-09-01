@@ -11,24 +11,25 @@ export type WheelPresentation =
 export type SceneAssetMode = "live_3d" | "authored_2_5d";
 
 /**
- * Asset-specific rendering facts for the R2-first concept experience.
- *
- * Item 3 did not bundle a live model: the best timeboxed CC BY candidate
- * required an authenticated official download before topology could be
- * inspected. The authored 2.5D pack is therefore the only approved runtime
- * source until a licensed GLB clears the same gate.
+ * Asset-specific rendering facts for the R2-first experience. The primary live
+ * geometry is a licensed Volvo EX30 reference asset and is explicitly not
+ * represented as R2 geometry. Original authored views remain the safety pack.
  */
 export const SCENE_MANIFEST = {
-  id: "uvc-original-compact-suv-v1",
-  displayName: "Original compact electric SUV concept",
-  unofficialConcept: true,
-  mode: "authored_2_5d" as SceneAssetMode,
+  id: "openx-volvo-ex30-2024-reference",
+  displayName: "Licensed compact-SUV reference model",
+  unofficialConcept: false,
+  mode: "live_3d" as SceneAssetMode,
   aspectRatio: 16 / 9,
   model: {
-    src: null,
-    status: "blocked_pending_authorized_download_and_topology_audit",
-    candidateUrl:
-      "https://sketchfab.com/3d-models/lowpoly-generic-suv-edc994ad28ed438cb365c0e0389ac177",
+    src: "/models/openx-volvo-ex30-2024.glb",
+    status: "licensed_primary_with_procedural_fallback",
+    assetName: "2024 Volvo EX30 low-poly",
+    representsConfiguredVehicle: false,
+    license: "MPL-2.0 AND CC-BY-4.0",
+    attribution: "Mehdi Lagzouli / LagzDesign; OpenX adaptation © 2025 Dogan Ulus",
+    sourceUrl:
+      "https://github.com/vevalabs/openx-assets/tree/main/src/vehicles/main/m1_volvo_ex30_2024",
   },
   fallback: {
     showroomSrc: "/images/showroom-fallback.webp",
@@ -47,15 +48,15 @@ export const SCENE_MANIFEST = {
     rangeRulerOrigin: { x: 0.19, y: 0.82 },
   } satisfies Record<string, NormalizedAnchor>,
   bodyPaint: {
-    presentation: "masked_2d",
+    presentation: "mapped_live_material_with_masked_2d_fallback",
     sourceColor: "#143d2f",
     label: "Representative paint visualization",
   },
-  wheelPresentation: "representative_inset" as WheelPresentation,
+  wheelPresentation: "material_only" as WheelPresentation,
   labels: {
-    visualAccuracy: "Original concept visualization",
-    wheelAccuracy: "Representative wheel visualization",
-    affiliation: "Unofficial concept — not affiliated with a manufacturer",
+    visualAccuracy: "Licensed reference geometry — not R2 geometry",
+    wheelAccuracy: "Representative wheel treatment",
+    affiliation: "Licensed EX30 reference · not an R2",
   },
 } as const;
 

@@ -11,7 +11,11 @@ import {
   ScanLine,
 } from "lucide-react";
 import {
+  Component,
+  lazy,
+  Suspense,
   type CSSProperties,
+  type ReactNode,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -21,7 +25,10 @@ import {
   useState,
 } from "react";
 import { SCENE_MANIFEST, type NormalizedAnchor } from "../../scene/scene-manifest";
+import { detectWebGLSupport, type WebGLSupport } from "../../scene/webgl-support";
 import "./vehicle-canvas.css";
+
+const LiveVehicleViewport = lazy(() => import("../../scene/LiveVehicleViewport"));
 
 export type VehicleCanvasMode = "showroom" | "blueprint";
 export type VehicleViewPreset = "angle" | "profile" | "wheel" | "interior";
@@ -54,6 +61,10 @@ export type VehicleInteriorSelection = Readonly<{
   accuracy?: VehicleVisualAccuracy;
 }>;
 
+export type VehicleAccessorySelection = Readonly<{
+  towHitch: boolean;
+}>;
+
 export type VehicleHotspot = Readonly<{
   id: VehicleHotspotId;
   label: string;
@@ -73,6 +84,7 @@ export type VehicleCanvasProps = Readonly<{
   paint?: VehiclePaintSelection;
   wheel?: VehicleWheelSelection;
   interior?: VehicleInteriorSelection;
+  accessories?: VehicleAccessorySelection;
   mode?: VehicleCanvasMode;
   defaultMode?: VehicleCanvasMode;
   viewPreset?: VehicleViewPreset;
@@ -86,6 +98,27 @@ export type VehicleCanvasProps = Readonly<{
   onAssetStatusChange?: (status: VehicleAssetStatus) => void;
   onViewportChange?: (state: VehicleViewportState) => void;
 }>;
+
+type LiveRendererStatus = "loading" | "ready" | "failed";
+
+class LiveSceneBoundary extends Component<
+  Readonly<{ children: ReactNode; onFailure: (reason: string) => void }>,
+  Readonly<{ failed: boolean }>
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    this.props.onFailure(error instanceof Error ? error.message : "3D renderer failed");
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
 
 const DEFAULT_PAINT: VehiclePaintSelection = {
   id: "forest",
@@ -110,6 +143,10 @@ const DEFAULT_INTERIOR: VehicleInteriorSelection = {
   material: "textile",
   tone: "dark",
   accuracy: "representative",
+};
+
+const DEFAULT_ACCESSORIES: VehicleAccessorySelection = {
+  towHitch: false,
 };
 
 const PRESETS: readonly Readonly<{
@@ -250,6 +287,7 @@ export function VehicleCanvas({
   paint = DEFAULT_PAINT,
   wheel = DEFAULT_WHEEL,
   interior = DEFAULT_INTERIOR,
+  accessories = DEFAULT_ACCESSORIES,
   mode,
   defaultMode = "showroom",
   viewPreset,
@@ -268,7 +306,12 @@ export function VehicleCanvas({
   const [internalHotspot, setInternalHotspot] = useState<VehicleHotspotId | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
+  const [liveCameraResetRevision, setLiveCameraResetRevision] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [webglSupport] = useState<WebGLSupport>(() => detectWebGLSupport());
+  const [liveStatus, setLiveStatus] = useState<LiveRendererStatus>(
+    webglSupport === "supported" ? "loading" : "failed",
+  );
   const [assetStates, setAssetStates] = useState({
     angle: "loading" as const as VehicleAssetStatus,
     profile: "loading" as const as VehicleAssetStatus,
@@ -280,13 +323,18 @@ export function VehicleCanvas({
   const currentMode = mode ?? internalMode;
   const currentPreset = viewPreset ?? internalPreset;
   const currentHotspot = activeHotspotId === undefined ? internalHotspot : activeHotspotId;
-  const activeAsset = currentMode === "blueprint"
+  const authoredAsset = currentMode === "blueprint"
     ? assetStates.blueprint
     : currentPreset === "interior"
       ? "ready"
       : currentPreset === "angle"
         ? assetStates.angle
         : assetStates.profile;
+  const liveViewRequested = currentMode === "showroom" && currentPreset !== "interior";
+  const liveRendererActive = liveViewRequested
+    && webglSupport === "supported"
+    && liveStatus === "ready";
+  const activeAsset = liveRendererActive ? "ready" : authoredAsset;
 
   const resolvedHotspots = useMemo<readonly VehicleHotspot[]>(() => hotspots ?? [
     {
@@ -347,6 +395,18 @@ export function VehicleCanvas({
     if (typeof navigator.vibrate === "function") navigator.vibrate(7);
   }, []);
 
+  const handleLiveReady = useCallback(() => {
+    setLiveStatus("ready");
+  }, []);
+
+  const handleLiveFailure = useCallback(() => {
+    setLiveStatus("failed");
+  }, []);
+
+  const handleLiveInteraction = useCallback(() => {
+    haptic();
+  }, [haptic]);
+
   const selectPreset = useCallback((nextPreset: VehicleViewPreset) => {
     if (viewPreset === undefined) setInternalPreset(nextPreset);
     if ((nextPreset === "angle" || nextPreset === "interior") && currentMode === "blueprint") {
@@ -378,9 +438,11 @@ export function VehicleCanvas({
   const resetView = useCallback(() => {
     setPan({ x: 0, y: 0 });
     setParallax({ x: 0, y: 0 });
+    setLiveCameraResetRevision((revision) => revision + 1);
   }, []);
 
   const onPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (liveRendererActive) return;
     if ((event.target as HTMLElement).closest("button")) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     pointer.current = {
@@ -391,9 +453,10 @@ export function VehicleCanvas({
       panY: pan.y,
     };
     setDragging(true);
-  }, [pan.x, pan.y]);
+  }, [liveRendererActive, pan.x, pan.y]);
 
   const onPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (liveRendererActive) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     if (!dragging || pointer.current.id !== event.pointerId) {
       if (event.pointerType === "mouse" && !reducedMotion) {
@@ -409,15 +472,16 @@ export function VehicleCanvas({
     const nextY = pointer.current.panY
       + ((event.clientY - pointer.current.clientY) / Math.max(bounds.height, 1)) * 12;
     setPan({ x: clamp(nextX, -8, 8), y: clamp(nextY, -5, 5) });
-  }, [dragging, reducedMotion]);
+  }, [dragging, liveRendererActive, reducedMotion]);
 
   const finishPointer = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (liveRendererActive) return;
     if (pointer.current.id !== event.pointerId) return;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
     pointer.current.id = -1;
     setDragging(false);
     haptic();
-  }, [haptic]);
+  }, [haptic, liveRendererActive]);
 
   const onKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     const increments: Partial<Record<string, { x: number; y: number }>> = {
@@ -466,7 +530,10 @@ export function VehicleCanvas({
       data-paint={paint.id}
       data-wheel={wheel.id}
       data-interior={interior.id}
+      data-tow-hitch={accessories.towHitch || undefined}
       data-asset-status={activeAsset}
+      data-renderer={liveRendererActive ? "live_3d" : "authored_2_5d"}
+      data-live-status={liveStatus}
       data-reduced-motion={reducedMotion || undefined}
       style={canvasStyle}
       aria-label="Interactive vehicle configurator"
@@ -488,7 +555,7 @@ export function VehicleCanvas({
         onKeyDown={onKeyDown}
       >
         <p id="vehicle-canvas-instructions" className="vc-sr-only">
-          Drag to pan the vehicle. Use arrow keys to pan, B to toggle blueprint,
+          Drag to orbit the vehicle in live views. Use arrow keys to adjust the view, B to toggle blueprint,
           and Home or zero to reset the view.
         </p>
 
@@ -500,10 +567,35 @@ export function VehicleCanvas({
           <span className="vc-environment__ground" />
         </div>
 
+        {webglSupport === "supported" && liveStatus !== "failed" && (
+          <div className="vc-live-layer" aria-hidden="true">
+            <LiveSceneBoundary onFailure={handleLiveFailure}>
+              <Suspense fallback={null}>
+                <LiveVehicleViewport
+                  paint={{ color: paint.color }}
+                  wheel={{
+                    diameterInches: wheel.diameterInches,
+                    style: wheel.style ?? "aero",
+                  }}
+                  accessories={accessories}
+                  viewPreset={currentPreset}
+                  focus={currentHotspot}
+                  keyboardOrbit={{ yaw: pan.x * 0.035, pitch: pan.y * 0.025 }}
+                  resetRevision={liveCameraResetRevision}
+                  reducedMotion={reducedMotion}
+                  onReady={handleLiveReady}
+                  onFailure={handleLiveFailure}
+                  onInteraction={handleLiveInteraction}
+                />
+              </Suspense>
+            </LiveSceneBoundary>
+          </div>
+        )}
+
         <header className="vc-hud">
           <div className="vc-hud__identity">
             <span className="vc-hud__index">UVC / 01</span>
-            <strong>Compact electric SUV concept</strong>
+            <strong>{liveRendererActive ? "Licensed compact-SUV reference" : "Compact electric SUV concept"}</strong>
             <span>{SCENE_MANIFEST.labels.affiliation}</span>
           </div>
           <div className="vc-mode-switch" aria-label="Vehicle rendering mode">
@@ -526,13 +618,34 @@ export function VehicleCanvas({
 
         <div className="vc-status" aria-live="polite">
           <span className="vc-status__dot" aria-hidden="true" />
-          {activeAsset === "loading" && <><LoaderCircle aria-hidden="true" /> Loading authored view</>}
-          {activeAsset === "ready" && <>{accuracyLabel(accuracy)}</>}
-          {activeAsset === "fallback" && <>Fallback view · controls still active</>}
+          {liveViewRequested && webglSupport !== "unsupported" && liveStatus !== "ready" && liveStatus !== "failed" && (
+            <><LoaderCircle aria-hidden="true" /> Preparing real-time vehicle</>
+          )}
+          {liveRendererActive && <>Live 3D · representative vehicle</>}
+          {liveViewRequested && (webglSupport === "unsupported" || liveStatus === "failed") && (
+            <>Authored fallback · controls still active</>
+          )}
+          {!liveViewRequested && activeAsset === "loading" && <><LoaderCircle aria-hidden="true" /> Loading authored view</>}
+          {!liveViewRequested && activeAsset === "ready" && <>{accuracyLabel(accuracy)}</>}
+          {!liveViewRequested && activeAsset === "fallback" && <>Fallback view · controls still active</>}
         </div>
 
+        {liveRendererActive && (
+          <a
+            className="vc-model-attribution"
+            href={SCENE_MANIFEST.model.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Model: Mehdi Lagzouli / LagzDesign + OpenX · CC BY 4.0
+          </a>
+        )}
+
         <div className="vc-object" aria-live="polite">
-          <div className="vc-angle-view" aria-hidden={currentPreset !== "angle" || currentMode === "blueprint"}>
+          <div
+            className="vc-angle-view"
+            aria-hidden={liveRendererActive || currentPreset !== "angle" || currentMode === "blueprint"}
+          >
             <img
               className="vc-angle-view__image"
               src={assetUrl(SCENE_MANIFEST.fallback.showroomSrc)}
@@ -543,7 +656,10 @@ export function VehicleCanvas({
             <span className="vc-angle-view__paint" aria-hidden="true" />
           </div>
 
-          <div className="vc-profile-view" aria-hidden={currentPreset === "angle" && currentMode !== "blueprint"}>
+          <div
+            className="vc-profile-view"
+            aria-hidden={liveRendererActive || (currentPreset === "angle" && currentMode !== "blueprint")}
+          >
             <img
               className="vc-profile-view__base"
               src={assetUrl(SCENE_MANIFEST.fallback.sideSrc)}
@@ -566,7 +682,7 @@ export function VehicleCanvas({
 
           {currentPreset === "interior" && <InteriorView interior={interior} />}
 
-          {activeAsset === "fallback" && <AssetFallback />}
+          {authoredAsset === "fallback" && !liveRendererActive && <AssetFallback />}
 
           <div className="vc-hotspots" aria-label="Vehicle focus points">
             {resolvedHotspots.map((hotspot) => (
@@ -623,7 +739,7 @@ export function VehicleCanvas({
         </div>
 
         <footer className="vc-footer">
-          <span className="vc-drag-hint"><Move aria-hidden="true" /> Drag to explore</span>
+          <span className="vc-drag-hint"><Move aria-hidden="true" /> {liveRendererActive ? "Drag to orbit" : "Drag to explore"}</span>
           <span className="vc-selection-readout">
             <span
               style={{ backgroundColor: currentPreset === "interior" ? interior.color : paint.color }}
