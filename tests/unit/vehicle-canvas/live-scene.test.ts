@@ -3,6 +3,8 @@ import { BoxGeometry, Group, Mesh, MeshPhysicalMaterial, MeshStandardMaterial } 
 import { getCameraPose } from "../../../src/scene/camera-presets";
 import {
   applyLicensedVehicleConfiguration,
+  createLicensedVehicleBlueprintEdges,
+  disposeLicensedVehicleBlueprintEdges,
   getLicensedWheelColors,
   getLicensedWheelRimScale,
   LICENSED_VEHICLE_MATERIAL_MAP,
@@ -27,15 +29,24 @@ describe("live vehicle scene", () => {
     geometry.dispose();
   });
 
-  it("defines genuinely distinct camera compositions for angle, profile, and wheel views", () => {
+  it("defines genuinely distinct camera compositions for every vehicle view", () => {
     const angle = getCameraPose("angle", null);
     const profile = getCameraPose("profile", null);
     const wheel = getCameraPose("wheel", null);
+    const interior = getCameraPose("interior", null);
 
     expect(angle.position).not.toEqual(profile.position);
     expect(profile.position).not.toEqual(wheel.position);
+    expect(interior.position).not.toEqual(angle.position);
+    expect(interior.target[1]).toBeGreaterThan(1);
     expect(wheel.target[0]).toBeGreaterThan(1);
     expect(wheel.maxDistance).toBeLessThan(profile.maxDistance);
+    expect(Math.hypot(
+      wheel.position[0] - wheel.target[0],
+      wheel.position[1] - wheel.target[1],
+      wheel.position[2] - wheel.target[2],
+    )).toBeGreaterThan(1.5);
+    expect(wheel.position[0]).toBeCloseTo(wheel.target[0], 2);
   });
 
   it("keeps Profile square to the vehicle even when a prior focus remains active", () => {
@@ -116,6 +127,46 @@ describe("live vehicle scene", () => {
     bodyMaterial.dispose();
     rimMaterial.dispose();
     tireMaterial.dispose();
+  });
+
+  it("derives technical linework from the same licensed geometry and restores showroom paint", () => {
+    const root = new Group();
+    const geometry = new BoxGeometry(4, 1.5, 2);
+    const bodyMaterial = new MeshPhysicalMaterial({ color: "#ffffff" });
+    bodyMaterial.name = LICENSED_VEHICLE_MATERIAL_MAP.paint;
+    const body = new Mesh(geometry, bodyMaterial);
+    body.name = "Object_12";
+    root.add(body);
+
+    const edges = createLicensedVehicleBlueprintEdges(root);
+    expect(edges.children).toHaveLength(1);
+    expect(edges.children[0]?.name).toBe("BlueprintEdges:Object_12");
+    expect(body.geometry).toBe(geometry);
+
+    applyLicensedVehicleConfiguration(
+      root,
+      { color: "#2f4436" },
+      { diameterInches: 21, style: "aero" },
+      null,
+      "blueprint",
+    );
+    expect(bodyMaterial.color.getHexString()).not.toBe("2f4436");
+    expect(bodyMaterial.emissiveIntensity).toBeGreaterThan(0);
+
+    applyLicensedVehicleConfiguration(
+      root,
+      { color: "#2f4436" },
+      { diameterInches: 21, style: "aero" },
+      null,
+      "showroom",
+    );
+    expect(bodyMaterial.color.getHexString()).toBe("2f4436");
+    expect(bodyMaterial.emissiveIntensity).toBe(0);
+    expect(bodyMaterial.clearcoat).toBe(1);
+
+    disposeLicensedVehicleBlueprintEdges(edges);
+    geometry.dispose();
+    bodyMaterial.dispose();
   });
 
   it("reports the authored fallback when WebGL is unavailable", () => {

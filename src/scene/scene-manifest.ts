@@ -13,7 +13,8 @@ export type SceneAssetMode = "live_3d" | "authored_2_5d";
 /**
  * Asset-specific rendering facts for the R2-first experience. The primary live
  * geometry is a licensed Volvo EX30 reference asset and is explicitly not
- * represented as R2 geometry. Original authored views remain the safety pack.
+ * represented as R2 geometry. Every visible presentation and safety frame uses
+ * this same source geometry so identity remains continuous across mode changes.
  */
 export const SCENE_MANIFEST = {
   id: "openx-volvo-ex30-2024-reference",
@@ -23,7 +24,7 @@ export const SCENE_MANIFEST = {
   aspectRatio: 16 / 9,
   model: {
     src: "/models/openx-volvo-ex30-2024.glb",
-    status: "licensed_primary_with_procedural_fallback",
+    status: "licensed_primary_with_same_model_capture_fallback",
     assetName: "2024 Volvo EX30 low-poly",
     representsConfiguredVehicle: false,
     license: "MPL-2.0 AND CC-BY-4.0",
@@ -35,8 +36,6 @@ export const SCENE_MANIFEST = {
     showroomSrc: "/images/showroom-fallback.webp",
     sideSrc: "/images/vehicle-side.webp",
     blueprintSrc: "/images/vehicle-side-blueprint.webp",
-    scanMaskSrc: "/images/vehicle-scan-mask.webp",
-    paintMaskSrc: "/images/vehicle-paint-mask.webp",
     wheelInsetSrc: "/images/representative-wheel-inset.webp",
   },
   anchors: {
@@ -48,7 +47,7 @@ export const SCENE_MANIFEST = {
     rangeRulerOrigin: { x: 0.19, y: 0.82 },
   } satisfies Record<string, NormalizedAnchor>,
   bodyPaint: {
-    presentation: "mapped_live_material_with_masked_2d_fallback",
+    presentation: "mapped_live_material_with_neutral_same_model_fallback",
     sourceColor: "#143d2f",
     label: "Representative paint visualization",
   },

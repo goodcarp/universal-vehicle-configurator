@@ -2,9 +2,10 @@ import {
   CameraControls,
   ContactShadows,
   Environment,
+  Grid,
   Lightformer,
 } from "@react-three/drei";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import {
   Component,
   Suspense,
@@ -20,17 +21,24 @@ import {
 import { getCameraPose } from "./camera-presets";
 import { LicensedVehicleModel } from "./LicensedVehicleModel";
 import type { LiveVehicleViewportProps } from "./live-vehicle.types";
-import { VehicleModel } from "./VehicleModel";
 import "./live-vehicle.css";
 
 class LicensedModelBoundary extends Component<
-  Readonly<{ children: ReactNode; fallback: ReactNode }>,
+  Readonly<{
+    children: ReactNode;
+    fallback: ReactNode;
+    onFailure: (reason: string) => void;
+  }>,
   Readonly<{ failed: boolean }>
 > {
   state = { failed: false };
 
   static getDerivedStateFromError() {
     return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    this.props.onFailure(error instanceof Error ? error.message : "Licensed model failed to load");
   }
 
   render() {
@@ -88,18 +96,10 @@ function CameraDirector({
   );
 }
 
-function ReadyAndContextMonitor({
-  onReady,
+function ContextLossMonitor({
   onFailure,
-}: Pick<LiveVehicleViewportProps, "onReady" | "onFailure">) {
+}: Pick<LiveVehicleViewportProps, "onFailure">) {
   const gl = useThree((state) => state.gl);
-  const reported = useRef(false);
-
-  useFrame(() => {
-    if (reported.current) return;
-    reported.current = true;
-    onReady();
-  });
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -114,27 +114,28 @@ function ReadyAndContextMonitor({
   return null;
 }
 
-function Studio() {
+function Studio({ mode }: Pick<LiveVehicleViewportProps, "mode">) {
+  const blueprint = mode === "blueprint";
   return (
     <>
-      <ambientLight intensity={0.34} color="#eef4ef" />
+      <ambientLight intensity={blueprint ? 0.48 : 0.34} color={blueprint ? "#a7efff" : "#eef4ef"} />
       <directionalLight
         position={[4.5, 7.5, 5.5]}
-        intensity={1.5}
-        color="#fff4dd"
+        intensity={blueprint ? 0.72 : 1.5}
+        color={blueprint ? "#b8f4ff" : "#fff4dd"}
       />
       <directionalLight
         position={[-5.5, 3.2, -3.8]}
-        intensity={0.82}
-        color="#b9dfd8"
+        intensity={blueprint ? 1.05 : 0.82}
+        color={blueprint ? "#43bed9" : "#b9dfd8"}
       />
       <spotLight
         position={[0, 7, -2.5]}
-        intensity={18}
+        intensity={blueprint ? 8 : 18}
         angle={0.62}
         penumbra={0.9}
         distance={16}
-        color="#eef9f3"
+        color={blueprint ? "#9eeeff" : "#eef9f3"}
       />
       <Environment resolution={128} background={false}>
         <Lightformer
@@ -161,20 +162,35 @@ function Studio() {
           scale={2.3}
         />
       </Environment>
+      {blueprint && (
+        <Grid
+          args={[12, 12]}
+          position={[0, 0.03, 0]}
+          cellColor="#1c7088"
+          cellSize={0.25}
+          cellThickness={0.55}
+          sectionColor="#67ddf5"
+          sectionSize={1}
+          sectionThickness={0.85}
+          fadeDistance={9}
+          fadeStrength={1.6}
+          infiniteGrid={false}
+        />
+      )}
       <mesh rotation-x={-Math.PI / 2} position-y={0.015} receiveShadow>
         <circleGeometry args={[7.5, 64]} />
         <meshStandardMaterial
-          color="#d8d5ca"
+          color={blueprint ? "#0c4053" : "#d8d5ca"}
           roughness={0.82}
           metalness={0.02}
           transparent
-          opacity={0.3}
+          opacity={blueprint ? 0.18 : 0.3}
         />
       </mesh>
       <ContactShadows
         position={[0, 0.025, 0]}
         scale={8.5}
-        opacity={0.47}
+        opacity={blueprint ? 0.2 : 0.47}
         blur={1.75}
         far={2.8}
         resolution={256}
@@ -186,25 +202,18 @@ function Studio() {
 }
 
 function VehicleScene(props: LiveVehicleViewportProps) {
-  const proceduralFallback = (
-    <VehicleModel
-      paint={props.paint}
-      wheel={props.wheel}
-      accessories={props.accessories}
-      focus={props.focus}
-    />
-  );
-
   return (
     <>
-      <Studio />
-      <LicensedModelBoundary fallback={proceduralFallback}>
-        <Suspense fallback={proceduralFallback}>
+      <Studio mode={props.mode} />
+      <LicensedModelBoundary fallback={null} onFailure={props.onFailure}>
+        <Suspense fallback={null}>
           <LicensedVehicleModel
             paint={props.paint}
             wheel={props.wheel}
             accessories={props.accessories}
             focus={props.focus}
+            mode={props.mode}
+            onReady={props.onReady}
           />
         </Suspense>
       </LicensedModelBoundary>
@@ -216,14 +225,19 @@ function VehicleScene(props: LiveVehicleViewportProps) {
         reducedMotion={props.reducedMotion}
         onInteraction={props.onInteraction}
       />
-      <ReadyAndContextMonitor onReady={props.onReady} onFailure={props.onFailure} />
+      <ContextLossMonitor onFailure={props.onFailure} />
     </>
   );
 }
 
 export function LiveVehicleViewport(props: LiveVehicleViewportProps) {
   return (
-    <div className="live-vehicle-viewport" aria-hidden="true">
+    <div
+      className="live-vehicle-viewport"
+      data-render-mode={props.mode}
+      data-reduced-motion={props.reducedMotion || undefined}
+      aria-hidden="true"
+    >
       <Canvas
         className="live-vehicle-canvas"
         camera={{
@@ -252,6 +266,10 @@ export function LiveVehicleViewport(props: LiveVehicleViewportProps) {
           <VehicleScene {...props} />
         </Suspense>
       </Canvas>
+      <div className="live-vehicle-blueprint-overlay">
+        <span className="live-vehicle-blueprint-overlay__reticle" />
+        <span className="live-vehicle-blueprint-overlay__scan" />
+      </div>
     </div>
   );
 }

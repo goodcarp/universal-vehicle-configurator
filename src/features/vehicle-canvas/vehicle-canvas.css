@@ -129,14 +129,17 @@
   pointer-events: auto;
 }
 
-.vehicle-canvas[data-renderer="live_3d"][data-mode="showroom"] .vc-object {
+.vehicle-canvas[data-renderer="live_3d"] .vc-object {
   z-index: 6;
   pointer-events: none;
   transform: translate(-50%, -50%);
 }
 
-.vehicle-canvas[data-renderer="live_3d"][data-mode="showroom"] .vc-angle-view,
-.vehicle-canvas[data-renderer="live_3d"][data-mode="showroom"] .vc-profile-view {
+.vehicle-canvas[data-renderer="live_3d"] .vc-angle-view,
+.vehicle-canvas[data-renderer="live_3d"] .vc-profile-view,
+.vehicle-canvas[data-live-status="loading"] .vc-angle-view,
+.vehicle-canvas[data-live-status="loading"] .vc-profile-view,
+.vehicle-canvas[data-live-status="loading"] .vc-wheel {
   opacity: 0;
   pointer-events: none;
 }
@@ -369,6 +372,18 @@
   opacity: 0;
   pointer-events: none;
   transform: translateY(2%) scale(0.97);
+}
+
+.vc-interior-view__fallback-vehicle {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.vehicle-canvas[data-renderer="live_3d"] .vc-interior-view__fallback-vehicle {
+  display: none;
 }
 
 .vehicle-canvas:not([data-preset="angle"]) .vc-angle-view,
@@ -883,45 +898,10 @@
   filter: drop-shadow(0 2rem 2.2rem rgba(15, 24, 19, 0.18));
 }
 
-.vc-angle-view__paint {
-  position: absolute;
-  z-index: 2;
-  left: 8.5%;
-  top: 17.5%;
-  width: 84%;
-  height: 61%;
-  opacity: 0.88;
-  background: var(--paint-color);
-  clip-path: polygon(2% 55%, 10% 37%, 31% 21%, 60% 12%, 83% 21%, 95% 39%, 98% 57%, 91% 68%, 72% 72%, 50% 80%, 25% 79%, 6% 72%);
-  mix-blend-mode: color;
-  pointer-events: none;
-  transition: background 360ms ease, opacity 300ms ease;
-}
-
 .vc-profile-view__base {
   z-index: 1;
   filter: drop-shadow(0 2rem 2.1rem rgba(12, 23, 18, 0.22));
   transition: opacity 420ms ease, filter 420ms ease;
-}
-
-.vc-profile-view__paint {
-  position: absolute;
-  z-index: 2;
-  inset: 0;
-  background: var(--paint-color);
-  mask-image: url("/images/vehicle-paint-mask.webp");
-  mask-mode: luminance;
-  mask-position: center;
-  mask-repeat: no-repeat;
-  mask-size: contain;
-  -webkit-mask-image: url("/images/vehicle-paint-mask.webp");
-  -webkit-mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mix-blend-mode: color;
-  opacity: 0.76;
-  pointer-events: none;
-  transition: background 360ms ease, opacity 420ms ease;
 }
 
 .vc-profile-view__blueprint {
@@ -932,8 +912,7 @@
   transition: opacity 420ms ease, transform 650ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.vehicle-canvas[data-mode="blueprint"] .vc-profile-view__base,
-.vehicle-canvas[data-mode="blueprint"] .vc-profile-view__paint {
+.vehicle-canvas[data-mode="blueprint"] .vc-profile-view__base {
   opacity: 0.06;
   filter: saturate(0) brightness(0.42);
 }
@@ -1320,6 +1299,30 @@
 
 .vehicle-canvas[data-mode="blueprint"] .vc-footer {
   color: rgba(214, 248, 255, 0.52);
+}
+
+/* The DOM art is a same-model safety frame, never a second live layer. Keep it
+   available for WebGL failure, but completely out of the healthy 3D composite. */
+.vehicle-canvas[data-renderer="live_3d"] .vc-angle-view,
+.vehicle-canvas[data-renderer="live_3d"] .vc-profile-view,
+.vehicle-canvas[data-renderer="live_3d"] .vc-wheel {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.vehicle-canvas[data-renderer="live_3d"][data-preset="wheel"] .vc-hotspots {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.vehicle-canvas[data-preset="wheel"] .vc-hud__identity,
+.vehicle-canvas[data-preset="wheel"] .vc-status,
+.vehicle-canvas[data-preset="wheel"] .vc-model-attribution,
+.vehicle-canvas[data-preset="interior"] .vc-hud__identity,
+.vehicle-canvas[data-preset="interior"] .vc-status,
+.vehicle-canvas[data-preset="interior"] .vc-model-attribution {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .vc-asset-fallback {

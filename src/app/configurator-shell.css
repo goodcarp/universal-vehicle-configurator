@@ -101,9 +101,12 @@
 }
 
 .configurator-viewport {
+  --quick-facts-bottom: 5.2rem;
+  --quick-facts-height: 3.55rem;
   position: relative;
   min-width: 0;
   padding: 0.8rem 0.4rem 0.8rem 0.8rem;
+  scroll-margin-top: 4.25rem;
 }
 
 .configurator-rail {
@@ -210,8 +213,10 @@
 }
 
 .configuration-change button {
-  width: 1.7rem;
-  height: 1.7rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  min-width: 44px;
+  min-height: 44px;
   flex: none;
   display: grid;
   place-items: center;
@@ -233,7 +238,7 @@
   position: absolute;
   z-index: 14;
   right: 1.7rem;
-  bottom: 5.2rem;
+  bottom: var(--quick-facts-bottom);
   display: flex;
   align-items: stretch;
   border: 1px solid rgba(16, 18, 16, 0.1);
@@ -241,6 +246,10 @@
   background: rgba(255, 255, 255, 0.72);
   box-shadow: 0 1rem 2.5rem rgba(25, 31, 26, 0.08);
   backdrop-filter: blur(18px);
+}
+
+.configurator-viewport[data-has-focus-card] .vc-focus-card {
+  bottom: calc(var(--quick-facts-bottom) + var(--quick-facts-height) + 0.8rem);
 }
 
 .configuration-facts > span {
@@ -468,6 +477,8 @@
   }
 
   .configurator-viewport {
+    --quick-facts-bottom: 4.6rem;
+    --quick-facts-height: 3.4rem;
     position: sticky;
     z-index: 10;
     top: 4.25rem;
@@ -491,7 +502,6 @@
 
   .configuration-facts {
     right: 1rem;
-    bottom: 4.6rem;
   }
 
   .configuration-facts > span {
@@ -503,7 +513,7 @@
   .configurator-header {
     position: sticky;
     top: 0;
-    min-height: 3.75rem;
+    min-height: 4rem;
     padding: 0.55rem 0.7rem;
   }
 
@@ -513,18 +523,33 @@
   }
 
   .header-action {
-    width: 2.35rem;
+    width: 2.75rem;
+    min-width: 44px;
+    min-height: 44px;
     padding: 0;
   }
 
+  .configurator-header__brand {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .configurator-header__mark {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
   .configurator-workspace {
-    min-height: calc(100dvh - 3.75rem);
+    min-height: calc(100dvh - 4rem);
   }
 
   .configurator-viewport {
-    top: 3.75rem;
+    --quick-facts-bottom: 4.75rem;
+    --quick-facts-height: 3.25rem;
+    top: 4rem;
     height: 48dvh;
     min-height: 21rem;
+    scroll-margin-top: 4rem;
   }
 
   .configurator-viewport .vehicle-canvas,
@@ -539,6 +564,53 @@
 
   .configurator-viewport .vc-view-picker {
     bottom: 0.7rem;
+  }
+
+  .configurator-viewport .vc-mode-switch button,
+  .configurator-viewport .vc-hotspot,
+  .configurator-viewport .vc-focus-card > button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .configurator-viewport .vc-hotspot[data-hotspot="utility"] {
+    left: min(var(--anchor-x), 86%);
+  }
+
+  .configurator-viewport[data-has-focus-card] .vc-focus-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    grid-template-areas:
+      "kind close"
+      "title close"
+      "detail detail";
+    column-gap: 0.65rem;
+    padding: 0.7rem 0.75rem;
+  }
+
+  .configurator-viewport .vc-focus-card__kind {
+    grid-area: kind;
+    margin-bottom: 0.2rem;
+  }
+
+  .configurator-viewport .vc-focus-card strong {
+    grid-area: title;
+    font-size: 0.9rem;
+  }
+
+  .configurator-viewport .vc-focus-card p {
+    grid-area: detail;
+    display: -webkit-box;
+    margin: 0.35rem 0 0;
+    overflow: hidden;
+    font-size: 0.7rem;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .configurator-viewport .vc-focus-card > button {
+    grid-area: close;
+    align-self: center;
   }
 
   .configurator-disclaimer {
@@ -561,7 +633,6 @@
   .configuration-facts {
     left: auto;
     right: 1rem;
-    bottom: 4.75rem;
   }
 
   .configuration-facts > span {

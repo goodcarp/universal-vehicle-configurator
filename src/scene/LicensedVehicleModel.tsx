@@ -1,15 +1,19 @@
 import { useGLTF } from "@react-three/drei";
+import { useThree } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useMemo } from "react";
 import type { Group } from "three";
 import type {
   LiveVehicleAccessories,
   LiveVehicleFocus,
   LiveVehiclePaint,
+  LiveVehicleRenderMode,
   LiveVehicleWheel,
 } from "./live-vehicle.types";
 import {
   applyLicensedVehicleConfiguration,
   cloneLicensedVehicleScene,
+  createLicensedVehicleBlueprintEdges,
+  disposeLicensedVehicleBlueprintEdges,
   disposeLicensedVehicleMaterials,
 } from "./licensed-vehicle-mapping";
 
@@ -54,6 +58,8 @@ export type LicensedVehicleModelProps = Readonly<{
   wheel: LiveVehicleWheel;
   accessories: LiveVehicleAccessories;
   focus: LiveVehicleFocus;
+  mode: LiveVehicleRenderMode;
+  onReady: () => void;
 }>;
 
 export function LicensedVehicleModel({
@@ -61,22 +67,39 @@ export function LicensedVehicleModel({
   wheel,
   accessories,
   focus,
+  mode,
+  onReady,
 }: LicensedVehicleModelProps) {
+  const invalidate = useThree((state) => state.invalidate);
   const { scene: sourceScene } = useGLTF(MODEL_URL, false, true);
   const scene = useMemo(
     () => cloneLicensedVehicleScene(sourceScene as Group),
     [sourceScene],
   );
+  const blueprintEdges = useMemo(
+    () => createLicensedVehicleBlueprintEdges(scene),
+    [scene],
+  );
 
   useLayoutEffect(() => {
-    applyLicensedVehicleConfiguration(scene, paint, wheel, focus);
-  }, [focus, paint, scene, wheel]);
+    applyLicensedVehicleConfiguration(scene, paint, wheel, focus, mode);
+    invalidate();
+  }, [focus, invalidate, mode, paint, scene, wheel]);
+
+  useEffect(() => {
+    onReady();
+  }, [onReady, scene]);
 
   useEffect(() => () => disposeLicensedVehicleMaterials(scene), [scene]);
+  useEffect(
+    () => () => disposeLicensedVehicleBlueprintEdges(blueprintEdges),
+    [blueprintEdges],
+  );
 
   return (
     <group name="LicensedVehicleRoot">
       <primitive object={scene} />
+      <primitive object={blueprintEdges} visible={mode === "blueprint"} />
       {focus === "wheels" && <WheelFocusRing />}
       {accessories.towHitch && <ConfiguredTowHitch focused={focus === "utility"} />}
     </group>

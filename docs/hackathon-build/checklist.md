@@ -4,8 +4,8 @@ Updated: 2026-09-01
 
 ## Implemented in source
 
-- [x] Original code-native procedural 3D vehicle retained as the resilient
-  fallback.
+- [x] One licensed GLB is the sole visible vehicle identity; alternate
+  procedural geometry is excluded from loading and error paths.
 - [x] Licensed OpenX Assets GLB shipped as the primary hero; exact
   source, attribution, license expression, and checksum recorded.
 - [x] Audited GLB integrated under public assets and verified in the live
@@ -16,8 +16,10 @@ Updated: 2026-09-01
   charge-port, and utility focus targets.
 - [x] Live paint material, mapped wheel rim/inset treatment, and conditional
   tow-hitch geometry driven by configurator state.
-- [x] Authored Blueprint and Interior presentations.
-- [x] Automatic 2.5D fallback for loading, unsupported WebGL, render failure,
+- [x] Same-GLB Blueprint presentation with technical materials and derived
+  edges; Interior keeps the same exterior visible with an honest material-only
+  overlay.
+- [x] Automatic same-GLB capture fallback for unsupported WebGL, render failure,
   and context loss.
 - [x] Human controls and Site Tools connected to the same configuration and
   presentation state.
@@ -33,7 +35,7 @@ Updated: 2026-09-01
   with the integrated GLB.
 - [x] Rejected external candidates and their licenses are recorded in
   [`docs/asset-license.md`](../asset-license.md).
-- [x] Authored 2.5D fallback provenance and integrity hashes are retained.
+- [x] Same-model safety-frame provenance and integrity hashes are recorded.
 
 ## Final demo verification
 

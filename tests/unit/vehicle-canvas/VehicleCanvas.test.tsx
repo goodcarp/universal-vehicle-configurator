@@ -79,7 +79,7 @@ describe("VehicleCanvas", () => {
     expect(frontWheel).toHaveStyle({ "--wheel-scale": String(22 / 21) });
   });
 
-  it("renders every interior selection as a distinct cabin and material study", () => {
+  it("keeps interior choices tied to an honest material study", () => {
     const { container, rerender } = render(
       <VehicleCanvas defaultViewPreset="interior" />,
     );
@@ -87,7 +87,8 @@ describe("VehicleCanvas", () => {
 
     expect(canvas).toHaveAttribute("data-preset", "interior");
     expect(screen.getByRole("button", { name: "Interior" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByLabelText("Black Crater representative cabin visualization")).toBeVisible();
+    expect(screen.getByLabelText("Black Crater representative interior material preview")).toBeVisible();
+    expect(screen.getByText("Material preview only · cabin geometry not modeled")).toBeVisible();
 
     rerender(
       <VehicleCanvas
@@ -99,9 +100,9 @@ describe("VehicleCanvas", () => {
     expect(canvas).toHaveAttribute("data-interior", "interior.coastal_cloud");
     expect(canvas.style.getPropertyValue("--interior-color")).toBe("#e6e0d4");
     expect(canvas.style.getPropertyValue("--interior-accent")).toBe("#b7a77e");
-    expect(screen.getByLabelText("Coastal Cloud Signature representative cabin visualization"))
+    expect(screen.getByLabelText("Coastal Cloud Signature representative interior material preview"))
       .toHaveAttribute("data-interior-material", "vegan-leather");
-    expect(screen.getByLabelText("Coastal Cloud Signature representative cabin visualization"))
+    expect(screen.getByLabelText("Coastal Cloud Signature representative interior material preview"))
       .toHaveAttribute("data-interior-tone", "light");
     expect(screen.getByText("Coastal Cloud Signature · vegan-leather")).toBeVisible();
     expect(container.querySelector(".vc-material-sample__surface")).toBeInTheDocument();
@@ -234,7 +235,7 @@ describe("VehicleCanvas", () => {
       />,
     );
 
-    fireEvent.error(screen.getByAltText("Original unofficial electric SUV concept in side profile"));
+    fireEvent.error(screen.getByAltText("Licensed compact electric SUV reference in side profile"));
 
     expect(screen.getByText("Vehicle view unavailable")).toBeVisible();
     expect(screen.getByText("Configuration controls remain active.")).toBeVisible();

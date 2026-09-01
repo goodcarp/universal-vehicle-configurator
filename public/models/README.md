@@ -4,7 +4,8 @@
 Angle, Profile, and Wheel showroom views. It is a low-poly 2024 Volvo EX30
 reference model and **is not R2 geometry**. The configurator applies
 representative R2 paint and wheel treatments to this reference body. A separate
-original procedural compact-SUV model remains the loading and runtime fallback.
+set of safety frames captured from this exact GLB provides loading and runtime
+fallback without changing vehicle identity.
 
 ## Provenance
 

@@ -12,21 +12,21 @@ const expected = [
     width: 1600,
     height: 900,
     maxBytes: 180_000,
-    sha256: "05c73904dcca2354819f33f21fa775c1763047bae2ef44ddcedf3695db89f520",
+    sha256: "293c5e9de95cfd0e64646e326aeda72ed3b6fa0cf52feb06aea94d49ec5ba682",
   },
   {
     path: "public/images/vehicle-side.webp",
     width: 1600,
     height: 900,
     maxBytes: 220_000,
-    sha256: "477295f238b4c5c657276ae7ded9d0e02465d4184006930d27489763b3fa70f9",
+    sha256: "ee803588f352b176e5d40427914169e7469e3f0f1f5808399ec37811124e0cca",
   },
   {
     path: "public/images/vehicle-side-blueprint.webp",
     width: 1600,
     height: 900,
     maxBytes: 420_000,
-    sha256: "057c09e9fa39cfbea07d3894136e7469dd13800fce103e4df3dcd144b8583c80",
+    sha256: "0bd369c9e330716c409bf91ba3ce75eb7da11719c6327ddfc0bd4def375e4785",
   },
   {
     path: "public/images/vehicle-scan-mask.webp",
@@ -47,7 +47,7 @@ const expected = [
     width: 512,
     height: 512,
     maxBytes: 120_000,
-    sha256: "392b1cbfc2659665bd0a53067110e41a34f98eb7c06abd43fb142cd6eb9828d5",
+    sha256: "ff3a517c19711c48cb90b9d195eb1144e36c145123812b9e342a37460d418a90",
   },
 ];
 
@@ -121,7 +121,7 @@ for (const asset of expected) {
 }
 
 console.log(`Approved public safety-pack payload: ${totalBytes} bytes`);
-console.log("Live 3D asset: intentionally not bundled; runtime mode is authored_2_5d.");
+console.log("Live 3D asset: licensed primary with same-model safety frames.");
 
 if (failed) {
   process.exitCode = 1;

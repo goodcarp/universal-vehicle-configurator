@@ -10,14 +10,16 @@ and configurable PBR materials. Its recorded license expression is MPL-2.0 AND
 CC-BY-4.0. The exact audited GLB is shipped under `public/models/` and has passed
 runtime and visual verification.
 
-The original code-native procedural 3D compact-EV concept now remains as the
-resilient load/error fallback behind the licensed GLB. Both presentations are
-representative rather than a manufacturer-exact Rivian R2, and the external
-mesh must be presented as an unofficial, unaffiliated visualization.
+The licensed GLB is now the sole visible vehicle identity. The separate
+code-native procedural compact-EV concept is not mounted during loading or
+errors. The external mesh remains representative rather than a
+manufacturer-exact Rivian R2 and must be presented as an unofficial,
+unaffiliated visualization.
 
-The authored 2.5D safety pack remains valuable rather than discarded: it gives
-the page an immediate first frame, supplies the Blueprint and Interior views,
-and keeps every configurator control usable if WebGL is unavailable or fails.
+Safety frames are captured directly from the same GLB. Blueprint restyles a
+clone of that live model with technical materials and derived edges. Interior
+keeps the same exterior GLB visible and adds a clearly labeled material preview
+because the source has no cabin geometry.
 
 ## Implemented live experience
 
@@ -31,8 +33,10 @@ and keeps every configurator control usable if WebGL is unavailable or fails.
 - Tow selection that adds or removes hitch geometry.
 - Studio lighting, environment reflections, ground/contact shadows, and a
   bounded device-pixel ratio for a polished but performance-aware presentation.
-- Automatic procedural 3D fallback while the GLB loads or fails, plus authored
-  fallback after unsupported, failed, or lost WebGL contexts.
+- Null loading boundary plus same-GLB capture fallback after unsupported,
+  failed, or lost WebGL contexts.
+- DOM safety-frame layers are forced out of the healthy WebGL composite to
+  prevent doubled silhouettes and stale paint ghosting.
 
 Human UI changes and the configurator Site Tools use the same central mutation
 and presentation state. An agent can therefore change the build and direct the
@@ -41,11 +45,11 @@ canvas.
 
 ## Honest scope boundary
 
-Blueprint and Interior are authored presentations, not explorable live vehicle
-geometry. The primary live model is an unbadged EX30-derived mesh; the original
-compact-EV concept is its fallback. Neither should be described
-as a manufacturer-accurate R2 clone or as endorsed by Rivian, Volvo, the model
-artists, or OpenX Assets.
+Blueprint is an explorable technical treatment of the same exterior geometry.
+Interior is deliberately limited to an exterior cabin-adjacent view and
+material preview; cabin geometry is not modeled. The primary model is an
+unbadged EX30-derived mesh and must not be described as a manufacturer-accurate
+R2 clone or as endorsed by Rivian, Volvo, the model artists, or OpenX Assets.
 
 Final local production QA passed at desktop and 390 px / 430 px phone widths:
 the licensed model loaded, the page exposed all eight WebMCP tools, there was

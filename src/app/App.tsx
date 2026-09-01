@@ -1,5 +1,5 @@
 import { Check, CircleDashed, Copy, Share2, Sparkles, Undo2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { VehicleConfigurator } from "../features/configurator";
 import {
   VehicleCanvas,
@@ -35,6 +35,10 @@ import {
   vehiclePaint,
   vehicleWheel,
 } from "./presentation";
+import {
+  presentationSummary,
+  revealAgentPresentation,
+} from "./presentation-visibility";
 
 const INITIAL_TOOL_STATUS: ConfiguratorSiteToolsStatus = {
   state: "registering",
@@ -44,6 +48,7 @@ const INITIAL_TOOL_STATUS: ConfiguratorSiteToolsStatus = {
 type ChangeNotice = {
   title: string;
   detail: string;
+  source: "agent" | "human";
 };
 
 function ToolStatus({ status }: { status: ConfiguratorSiteToolsStatus }) {
@@ -78,12 +83,28 @@ export function App() {
   const [changeNotice, setChangeNotice] = useState<ChangeNotice | null>(null);
   const [shareStatus, setShareStatus] = useState<"idle" | "copied">("idle");
   const [reviewOpen, setReviewOpen] = useState(false);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const pendingHumanPresentationRevision = useRef<number | null>(null);
 
   useEffect(() => {
     void registerConfiguratorSiteTools().then(setSiteTools);
   }, []);
 
-  useEffect(() => configuratorPresentation.subscribe(setPresentation), []);
+  useEffect(() => configuratorPresentation.subscribe((nextPresentation) => {
+    setPresentation(nextPresentation);
+
+    if (pendingHumanPresentationRevision.current === nextPresentation.revision) {
+      pendingHumanPresentationRevision.current = null;
+      return;
+    }
+
+    setChangeNotice({
+      title: "Agent moved the vehicle",
+      detail: presentationSummary(nextPresentation),
+      source: "agent",
+    });
+    revealAgentPresentation(viewportRef.current);
+  }), []);
 
   useEffect(() => {
     if (window.location.search) {
@@ -127,11 +148,23 @@ export function App() {
   const activeHotspot: VehicleHotspotId | null =
     presentation.focus === "none" ? null : presentation.focus;
 
+  const setPresentationFromUser = useCallback((
+    patch: Parameters<typeof configuratorPresentation.setFromUser>[0],
+  ) => {
+    const previousRevision = configuratorPresentation.getState().revision;
+    pendingHumanPresentationRevision.current = previousRevision + 1;
+    const nextPresentation = configuratorPresentation.setFromUser(patch);
+    if (nextPresentation.revision === previousRevision) {
+      pendingHumanPresentationRevision.current = null;
+    }
+    return nextPresentation;
+  }, []);
+
   const hotspots: VehicleHotspot[] = [
     {
       id: "paint",
       label: "Exterior finish",
-      detail: `${paintOption?.label ?? "Representative finish"} · selection rendered on the authored concept`,
+      detail: `${paintOption?.label ?? "Representative finish"} · selection rendered on the licensed reference vehicle`,
       anchor: SCENE_MANIFEST.anchors.bodyPaint,
       accuracy: "representative",
     },
@@ -179,6 +212,7 @@ export function App() {
       setChangeNotice({
         title: "Agent changes undone",
         detail: `Restored configuration · revision ${result.revision}`,
+        source: "human",
       });
     }
   };
@@ -220,7 +254,11 @@ export function App() {
       </header>
 
       <section className="configurator-workspace" aria-label="Vehicle configuration workspace">
-        <div className="configurator-viewport">
+        <div
+          className="configurator-viewport"
+          data-has-focus-card={activeHotspot || undefined}
+          ref={viewportRef}
+        >
           <VehicleCanvas
             paint={paint}
             wheel={wheel}
@@ -230,17 +268,21 @@ export function App() {
             viewPreset={viewPreset}
             activeHotspotId={activeHotspot}
             hotspots={hotspots}
-            onModeChange={(mode) => configuratorPresentation.setFromUser({ mode })}
+            onModeChange={(mode) => setPresentationFromUser({ mode })}
             onViewPresetChange={(nextViewPreset) =>
-              configuratorPresentation.setFromUser({ viewPreset: nextViewPreset })
+              setPresentationFromUser({ viewPreset: nextViewPreset })
             }
             onHotspotChange={(hotspot) =>
-              configuratorPresentation.setFromUser({ focus: hotspot ?? "none" })
+              setPresentationFromUser({ focus: hotspot ?? "none" })
             }
           />
 
           {changeNotice && (
-            <aside className="configuration-change" aria-live="polite">
+            <aside
+              className="configuration-change"
+              data-source={changeNotice.source}
+              aria-live="polite"
+            >
               <Sparkles aria-hidden="true" />
               <div>
                 <strong>{changeNotice.title}</strong>
@@ -292,22 +334,23 @@ export function App() {
                 setChangeNotice({
                   title: nextOption?.label ?? "Configuration updated",
                   detail: detail || "Applied to the current build",
+                  source: "human",
                 });
                 if (changedGroup === "wheels") {
-                  configuratorPresentation.setFromUser({
+                  setPresentationFromUser({
                     viewPreset: "profile",
                     focus: "wheels",
                   });
                 } else if (changedGroup === "paint") {
-                  configuratorPresentation.setFromUser({ focus: "paint" });
+                  setPresentationFromUser({ focus: "paint" });
                 } else if (changedGroup === "interior") {
-                  configuratorPresentation.setFromUser({
+                  setPresentationFromUser({
                     mode: "showroom",
                     viewPreset: "interior",
                     focus: "none",
                   });
                 } else if (changedGroup === "towing") {
-                  configuratorPresentation.setFromUser({ focus: "utility" });
+                  setPresentationFromUser({ focus: "utility" });
                 }
               }}
               onBuyerContextChange={(patch) => {

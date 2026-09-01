@@ -1,5 +1,6 @@
 export type LiveVehicleViewPreset = "angle" | "profile" | "wheel" | "interior";
 export type LiveVehicleFocus = "paint" | "charge-port" | "wheels" | "utility" | null;
+export type LiveVehicleRenderMode = "showroom" | "blueprint";
 
 export type LiveVehiclePaint = Readonly<{
   color: string;
@@ -18,6 +19,7 @@ export type LiveVehicleViewportProps = Readonly<{
   paint: LiveVehiclePaint;
   wheel: LiveVehicleWheel;
   accessories: LiveVehicleAccessories;
+  mode: LiveVehicleRenderMode;
   viewPreset: LiveVehicleViewPreset;
   focus: LiveVehicleFocus;
   keyboardOrbit: Readonly<{ yaw: number; pitch: number }>;

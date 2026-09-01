@@ -1048,7 +1048,7 @@
       "source": "OpenX Assets release 20250821",
       "sourceUrl": "https://github.com/vevalabs/openx-assets/tree/main/src/vehicles/main/m1_volvo_ex30_2024",
       "sha256": "6c9a190919432a379671c4a72fce7b9d575560b74de612b2d220f09328e9db4d",
-      "status": "shipped licensed reference geometry with procedural load/error fallback; represents a 2024 Volvo EX30 and must not be described as R2 geometry",
+      "status": "shipped licensed reference geometry with same-model capture fallback; represents a 2024 Volvo EX30 and must not be described as R2 geometry",
       "representsConfiguredVehicle": false
     },
     "parts": {

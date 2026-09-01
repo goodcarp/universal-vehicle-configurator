@@ -8,7 +8,7 @@ export type CameraPose = Readonly<{
   minDistance: number;
 }>;
 
-const POSES: Record<Exclude<LiveVehicleViewPreset, "interior">, CameraPose> = {
+const POSES: Record<LiveVehicleViewPreset, CameraPose> = {
   angle: {
     position: [4.65, 1.95, 5.85],
     target: [0, 0.84, 0],
@@ -22,10 +22,16 @@ const POSES: Record<Exclude<LiveVehicleViewPreset, "interior">, CameraPose> = {
     maxDistance: 9.5,
   },
   wheel: {
-    position: [2.55, 1.05, 3.7],
-    target: [1.47, 0.42, 0.80],
-    minDistance: 2.3,
-    maxDistance: 6.5,
+    position: [1.38, 0.58, 3.9],
+    target: [1.38, 0.37, 0.81],
+    minDistance: 2.1,
+    maxDistance: 5.5,
+  },
+  interior: {
+    position: [2.15, 1.72, 3.85],
+    target: [0.25, 1.08, 0.38],
+    minDistance: 3.25,
+    maxDistance: 7.4,
   },
 };
 
@@ -60,6 +66,8 @@ export function getCameraPose(
     ? POSES.profile
     : preset === "wheel"
       ? POSES.wheel
+      : preset === "interior"
+        ? POSES.interior
       : focus
         ? FOCUS_POSES[focus] ?? POSES.angle
         : POSES.angle;

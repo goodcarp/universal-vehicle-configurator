@@ -214,56 +214,23 @@ function InteriorView({ interior }: Readonly<{ interior: VehicleInteriorSelectio
       className="vc-interior-view"
       data-interior-material={interior.material ?? "textile"}
       data-interior-tone={interior.tone ?? "dark"}
-      aria-label={`${interior.label} representative cabin visualization`}
+      aria-label={`${interior.label} representative interior material preview`}
     >
-      <div className="vc-cabin" aria-hidden="true">
-        <span className="vc-cabin__roof" />
-        <span className="vc-cabin__glass">
-          <span className="vc-cabin__horizon" />
-        </span>
-        <span className="vc-cabin__pillar vc-cabin__pillar--left" />
-        <span className="vc-cabin__pillar vc-cabin__pillar--right" />
-
-        <div className="vc-cabin__dashboard">
-          <span className="vc-cabin__dash-surface" />
-          <span className="vc-cabin__trim" />
-          <span className="vc-cabin__display vc-cabin__display--driver">
-            <i /><i /><i />
-          </span>
-          <span className="vc-cabin__display vc-cabin__display--center">
-            <i /><i /><i /><i />
-          </span>
-        </div>
-
-        <span className="vc-cabin__steering"><i /></span>
-        <span className="vc-cabin__console"><i /><i /></span>
-
-        <span className="vc-seat vc-seat--driver">
-          <i className="vc-seat__headrest" />
-          <i className="vc-seat__back" />
-          <i className="vc-seat__cushion" />
-          <i className="vc-seat__seam" />
-        </span>
-        <span className="vc-seat vc-seat--passenger">
-          <i className="vc-seat__headrest" />
-          <i className="vc-seat__back" />
-          <i className="vc-seat__cushion" />
-          <i className="vc-seat__seam" />
-        </span>
-
-        <span className="vc-cabin__door vc-cabin__door--left"><i /></span>
-        <span className="vc-cabin__door vc-cabin__door--right"><i /></span>
-        <span className="vc-cabin__ambient" />
-      </div>
+      <img
+        className="vc-interior-view__fallback-vehicle"
+        src={assetUrl(SCENE_MANIFEST.fallback.showroomSrc)}
+        alt=""
+        aria-hidden="true"
+      />
 
       <div className="vc-material-sample" aria-hidden="true">
         <span className="vc-material-sample__surface" />
         <span className="vc-material-sample__stitch" />
       </div>
       <div className="vc-interior-view__caption">
-        <span><Armchair aria-hidden="true" /> Cabin material study</span>
+        <span><Armchair aria-hidden="true" /> Interior palette</span>
         <strong>{interior.label}</strong>
-        <small>{accuracyLabel(interior.accuracy)}</small>
+        <small>Material preview only · cabin geometry not modeled</small>
       </div>
     </div>
   );
@@ -330,7 +297,10 @@ export function VehicleCanvas({
       : currentPreset === "angle"
         ? assetStates.angle
         : assetStates.profile;
-  const liveViewRequested = currentMode === "showroom" && currentPreset !== "interior";
+  const liveViewRequested = true;
+  const liveRendererPending = liveViewRequested
+    && webglSupport === "supported"
+    && liveStatus === "loading";
   const liveRendererActive = liveViewRequested
     && webglSupport === "supported"
     && liveStatus === "ready";
@@ -347,7 +317,7 @@ export function VehicleCanvas({
     {
       id: "charge-port",
       label: "Charge port",
-      detail: "Feature location shown on original concept",
+      detail: "Representative feature location on the licensed reference vehicle",
       anchor: SCENE_MANIFEST.anchors.chargePort,
       accuracy: "representative",
     },
@@ -578,6 +548,7 @@ export function VehicleCanvas({
                     style: wheel.style ?? "aero",
                   }}
                   accessories={accessories}
+                  mode={currentMode}
                   viewPreset={currentPreset}
                   focus={currentHotspot}
                   keyboardOrbit={{ yaw: pan.x * 0.035, pitch: pan.y * 0.025 }}
@@ -595,7 +566,7 @@ export function VehicleCanvas({
         <header className="vc-hud">
           <div className="vc-hud__identity">
             <span className="vc-hud__index">UVC / 01</span>
-            <strong>{liveRendererActive ? "Licensed compact-SUV reference" : "Compact electric SUV concept"}</strong>
+            <strong>Licensed compact-SUV reference</strong>
             <span>{SCENE_MANIFEST.labels.affiliation}</span>
           </div>
           <div className="vc-mode-switch" aria-label="Vehicle rendering mode">
@@ -623,7 +594,7 @@ export function VehicleCanvas({
           )}
           {liveRendererActive && <>Live 3D · representative vehicle</>}
           {liveViewRequested && (webglSupport === "unsupported" || liveStatus === "failed") && (
-            <>Authored fallback · controls still active</>
+            <>Same-model fallback · controls still active</>
           )}
           {!liveViewRequested && activeAsset === "loading" && <><LoaderCircle aria-hidden="true" /> Loading authored view</>}
           {!liveViewRequested && activeAsset === "ready" && <>{accuracyLabel(accuracy)}</>}
@@ -644,30 +615,28 @@ export function VehicleCanvas({
         <div className="vc-object" aria-live="polite">
           <div
             className="vc-angle-view"
-            aria-hidden={liveRendererActive || currentPreset !== "angle" || currentMode === "blueprint"}
+            aria-hidden={liveRendererPending || liveRendererActive || currentPreset !== "angle" || currentMode === "blueprint"}
           >
             <img
               className="vc-angle-view__image"
               src={assetUrl(SCENE_MANIFEST.fallback.showroomSrc)}
-              alt="Original unofficial electric SUV concept from a front three-quarter angle"
+              alt="Licensed compact electric SUV reference from a front three-quarter angle"
               onLoad={() => setAssetState("angle", "ready")}
               onError={() => setAssetState("angle", "fallback")}
             />
-            <span className="vc-angle-view__paint" aria-hidden="true" />
           </div>
 
           <div
             className="vc-profile-view"
-            aria-hidden={liveRendererActive || (currentPreset === "angle" && currentMode !== "blueprint")}
+            aria-hidden={liveRendererPending || liveRendererActive || (currentPreset === "angle" && currentMode !== "blueprint")}
           >
             <img
               className="vc-profile-view__base"
               src={assetUrl(SCENE_MANIFEST.fallback.sideSrc)}
-              alt="Original unofficial electric SUV concept in side profile"
+              alt="Licensed compact electric SUV reference in side profile"
               onLoad={() => setAssetState("profile", "ready")}
               onError={() => setAssetState("profile", "fallback")}
             />
-            <span className="vc-profile-view__paint" aria-hidden="true" />
             <img
               className="vc-profile-view__blueprint"
               src={assetUrl(SCENE_MANIFEST.fallback.blueprintSrc)}
