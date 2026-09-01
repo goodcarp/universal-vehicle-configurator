@@ -1,5 +1,6 @@
 import { ArrowUpRight, Check, CircleDashed } from "lucide-react";
 import { useEffect, useState } from "react";
+import { RangeRealityPrototype } from "../features/range-reality/RangeRealityPrototype";
 import {
   registerProbeSiteTool,
   type SiteToolsProbeStatus,
@@ -60,21 +61,7 @@ export function App() {
           </div>
         </div>
 
-        <div className="vehicle-stage" aria-label="Vehicle viewport loading boundary">
-          <div className="stage-grid" aria-hidden="true" />
-          <div className="scan-orbit orbit-one" aria-hidden="true" />
-          <div className="scan-orbit orbit-two" aria-hidden="true" />
-          <div className="vehicle-ghost" aria-hidden="true">
-            <span className="roof" />
-            <span className="body" />
-            <span className="wheel wheel-front" />
-            <span className="wheel wheel-rear" />
-          </div>
-          <div className="viewport-note">
-            <span>Scene 00</span>
-            <strong>Asset gate queued</strong>
-          </div>
-        </div>
+        <RangeRealityPrototype />
       </section>
 
       <footer className="release-rail">

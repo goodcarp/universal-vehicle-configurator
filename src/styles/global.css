@@ -104,14 +104,15 @@ a {
   width: min(96rem, 100%);
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(18rem, 0.68fr) minmax(32rem, 1.32fr);
+  grid-template-columns: minmax(0, 0.64fr) minmax(0, 1fr);
   align-items: center;
-  gap: clamp(2rem, 5vw, 7rem);
+  gap: clamp(1.5rem, 3vw, 4rem);
 }
 
 .hero-copy {
   position: relative;
   z-index: 2;
+  min-width: 0;
 }
 
 .eyebrow,
@@ -130,7 +131,7 @@ a {
 
 h1 {
   margin: 0;
-  font-size: clamp(3.2rem, 6.5vw, 7.7rem);
+  font-size: clamp(3.2rem, 5.6vw, 6.2rem);
   font-weight: 430;
   line-height: 0.88;
   letter-spacing: -0.075em;
