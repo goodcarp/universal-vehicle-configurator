@@ -294,7 +294,20 @@ function combineConfidence(confidences: Confidence[]): Confidence {
   return confidences.some((confidence) => confidence === "estimated") ? "estimated" : "verified";
 }
 
+/**
+ * Ceiling for any figure describing the vehicle itself.
+ *
+ * When product.representation is "modelled" the catalog's sources are the basis
+ * for a stand-in vehicle, not a citation of it, so nothing about the car can be
+ * "verified". Incentives deliberately do not pass through here — a tax credit
+ * is real whatever car qualifies for it.
+ */
+function vehicleConfidence(catalog: Catalog, confidence: Confidence): Confidence {
+  return catalog.product.representation === "modelled" ? "estimated" : confidence;
+}
+
 function applyEffects(
+  catalog: Catalog,
   effects: CatalogEffect[],
   specs: Record<string, JsonValue>,
   specConfidence: Record<string, Confidence>,
@@ -310,7 +323,7 @@ function applyEffects(
     } else {
       throw new TypeError(`Effect '${effect.op}' for '${effect.spec}' requires numeric values.`);
     }
-    specConfidence[effect.spec] = effect.confidence;
+    specConfidence[effect.spec] = vehicleConfidence(catalog, effect.confidence);
   }
 }
 
@@ -416,10 +429,12 @@ export function resolve(
   for (const option of selectedOptions) {
     if (option.price.mode === "base") {
       baseMSRP += option.price.amount;
-      baseConfidences.push(option.price.confidence);
+      baseConfidences.push(vehicleConfidence(catalog, option.price.confidence));
     } else {
       vehicleOptions += option.price.amount;
-      if (option.price.amount !== 0) optionConfidences.push(option.price.confidence);
+      if (option.price.amount !== 0) {
+        optionConfidences.push(vehicleConfidence(catalog, option.price.confidence));
+      }
     }
 
     if (option.price.mode === "base" || option.price.amount !== 0) {
@@ -427,7 +442,7 @@ export function resolve(
         id: option.id,
         label: option.label,
         amount: option.price.amount,
-        confidence: option.price.confidence,
+        confidence: vehicleConfidence(catalog, option.price.confidence),
         category: option.price.mode === "base" ? "base" : "vehicle_option",
       });
     }
@@ -445,7 +460,7 @@ export function resolve(
       id: fee.id,
       label: fee.label,
       amount: fee.amount,
-      confidence: fee.confidence,
+      confidence: vehicleConfidence(catalog, fee.confidence),
       category: "fee",
     });
   }
@@ -461,17 +476,17 @@ export function resolve(
   const specConfidence: Record<string, Confidence> = {};
 
   for (const option of selectedOptions) {
-    if (option.price.mode === "base" && option.effects) applyEffects(option.effects, specs, specConfidence);
+    if (option.price.mode === "base" && option.effects) applyEffects(catalog, option.effects, specs, specConfidence);
   }
   for (const option of selectedOptions) {
-    if (option.price.mode !== "base" && option.effects) applyEffects(option.effects, specs, specConfidence);
+    if (option.price.mode !== "base" && option.effects) applyEffects(catalog, option.effects, specs, specConfidence);
   }
 
   let context = createExpressionContext(catalog, chosen, priceForExpressions, specs, buyerContext);
   for (const option of selectedOptions) {
     for (const override of option.overrides ?? []) {
       if (evaluateExpression(override.when, context)) {
-        applyEffects(override.effects, specs, specConfidence);
+        applyEffects(catalog, override.effects, specs, specConfidence);
         context = createExpressionContext(catalog, chosen, priceForExpressions, specs, buyerContext);
       }
     }
@@ -513,7 +528,7 @@ export function resolve(
       delivery = {
         window: option.delivery.window,
         gatedBy: option.id,
-        confidence: option.delivery.confidence,
+        confidence: vehicleConfidence(catalog, option.delivery.confidence),
       };
     }
   }
@@ -526,7 +541,7 @@ export function resolve(
       id: setup.id,
       label: setup.label,
       amount: setup.amount,
-      confidence: setup.confidence,
+      confidence: vehicleConfidence(catalog, setup.confidence),
       category: "ownership_setup",
     });
   }

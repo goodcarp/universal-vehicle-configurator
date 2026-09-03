@@ -150,3 +150,32 @@ describe("deterministic catalog resolution", () => {
     );
   });
 });
+
+describe("modelled-vehicle provenance", () => {
+  it("caps vehicle confidence but leaves incentive programs verified", () => {
+    const actual = resolve(catalog, {}, { state: "CO", financing: true });
+    // Baseline: the catalog describes a real vehicle today.
+    expect(catalog.product.representation ?? "actual").toBe("actual");
+    expect(actual.price.confidence.baseMSRP).toBe("verified");
+
+    const modelled = {
+      ...catalog,
+      product: { ...catalog.product, representation: "modelled" as const },
+    };
+    const result = resolve(modelled, {}, { state: "CO", financing: true });
+
+    // Nothing about the car may claim verification once it is a stand-in.
+    expect(result.price.confidence.baseMSRP).toBe("estimated");
+    expect(result.price.confidence.vehicleTotal).toBe("estimated");
+    expect(result.price.lines.every((line) => line.confidence === "estimated")).toBe(true);
+    expect(Object.values(result.specConfidence).every((c) => c === "estimated")).toBe(true);
+    expect(result.delivery?.confidence).toBe("estimated");
+
+    // Incentives are real programs; they keep their own sourcing either way.
+    const co = result.incentives.encodedPredicatesMatched.find((i) =>
+      /Colorado Innovative/i.test(i.label),
+    );
+    expect(co?.confidence).toBe("verified");
+    expect(co?.amount).toBe(750);
+  });
+});

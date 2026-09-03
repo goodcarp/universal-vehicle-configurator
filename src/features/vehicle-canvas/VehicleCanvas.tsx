@@ -25,7 +25,14 @@ import {
   useState,
 } from "react";
 import { SCENE_MANIFEST, type NormalizedAnchor } from "../../scene/scene-manifest";
+import {
+  DEFAULT_VEHICLE_MODEL_SOURCE,
+  resolveVehicleModelSource,
+  type VehicleModelSourceId,
+} from "../../scene/vehicle-model-source";
 import { detectWebGLSupport, type WebGLSupport } from "../../scene/webgl-support";
+import { LayeredVehicleFrame } from "./LayeredVehicleFrame";
+import { LAYERED_SOURCES } from "./layered-sources";
 import "./vehicle-canvas.css";
 
 const LiveVehicleViewport = lazy(() => import("../../scene/LiveVehicleViewport"));
@@ -84,6 +91,8 @@ export type VehicleCanvasProps = Readonly<{
   paint?: VehiclePaintSelection;
   wheel?: VehicleWheelSelection;
   interior?: VehicleInteriorSelection;
+  /** Which registered body draws the vehicle. Defaults to the licensed GLB. */
+  modelSource?: VehicleModelSourceId;
   accessories?: VehicleAccessorySelection;
   mode?: VehicleCanvasMode;
   defaultMode?: VehicleCanvasMode;
@@ -254,6 +263,7 @@ export function VehicleCanvas({
   paint = DEFAULT_PAINT,
   wheel = DEFAULT_WHEEL,
   interior = DEFAULT_INTERIOR,
+  modelSource,
   accessories = DEFAULT_ACCESSORIES,
   mode,
   defaultMode = "showroom",
@@ -297,6 +307,17 @@ export function VehicleCanvas({
       : currentPreset === "angle"
         ? assetStates.angle
         : assetStates.profile;
+  // A ?model= override makes the seam switchable without a rebuild, which is
+  // how the procedural body gets compared against the licensed GLB.
+  const activeModelSource: VehicleModelSourceId = useMemo(() => {
+    if (modelSource) return modelSource;
+    if (typeof window === "undefined") return DEFAULT_VEHICLE_MODEL_SOURCE;
+    const requested = new URLSearchParams(window.location.search).get("model");
+    return requested === "procedural" || requested === "licensed-glb"
+      ? requested
+      : DEFAULT_VEHICLE_MODEL_SOURCE;
+  }, [modelSource]);
+
   const liveViewRequested = true;
   const liveRendererPending = liveViewRequested
     && webglSupport === "supported"
@@ -305,6 +326,11 @@ export function VehicleCanvas({
     && webglSupport === "supported"
     && liveStatus === "ready";
   const activeAsset = liveRendererActive ? "ready" : authoredAsset;
+
+  // The HUD must describe whatever is actually on screen, not a fixed asset.
+  const modelAttribution = liveRendererActive
+    ? resolveVehicleModelSource(activeModelSource).attribution
+    : SCENE_MANIFEST.labels.affiliation;
 
   const resolvedHotspots = useMemo<readonly VehicleHotspot[]>(() => hotspots ?? [
     {
@@ -548,6 +574,7 @@ export function VehicleCanvas({
                     style: wheel.style ?? "aero",
                   }}
                   accessories={accessories}
+                  modelSource={activeModelSource}
                   interior={{
                     color: interior.color,
                     accentColor: interior.accentColor,
@@ -573,7 +600,7 @@ export function VehicleCanvas({
           <div className="vc-hud__identity">
             <span className="vc-hud__index">UVC / 01</span>
             <strong>Licensed compact-SUV reference</strong>
-            <span>{SCENE_MANIFEST.labels.affiliation}</span>
+            <span>{modelAttribution}</span>
           </div>
           <div className="vc-mode-switch" aria-label="Vehicle rendering mode">
             <button
@@ -623,11 +650,13 @@ export function VehicleCanvas({
             className="vc-angle-view"
             aria-hidden={liveRendererPending || liveRendererActive || currentPreset !== "angle" || currentMode === "blueprint"}
           >
-            <img
+            <LayeredVehicleFrame
               className="vc-angle-view__image"
-              src={assetUrl(SCENE_MANIFEST.fallback.showroomSrc)}
-              alt="Licensed compact electric SUV reference from a front three-quarter angle"
-              onLoad={() => setAssetState("angle", "ready")}
+              baseSrc={assetUrl(LAYERED_SOURCES.angle.base)}
+              maskSrc={assetUrl(LAYERED_SOURCES.angle.mask)}
+              paintColor={paint.color}
+              alt={`Licensed compact electric SUV reference from a front three-quarter angle, ${paint.label ?? "selected paint"}`}
+              onReady={() => setAssetState("angle", "ready")}
               onError={() => setAssetState("angle", "fallback")}
             />
           </div>
@@ -636,11 +665,13 @@ export function VehicleCanvas({
             className="vc-profile-view"
             aria-hidden={liveRendererPending || liveRendererActive || (currentPreset === "angle" && currentMode !== "blueprint")}
           >
-            <img
+            <LayeredVehicleFrame
               className="vc-profile-view__base"
-              src={assetUrl(SCENE_MANIFEST.fallback.sideSrc)}
-              alt="Licensed compact electric SUV reference in side profile"
-              onLoad={() => setAssetState("profile", "ready")}
+              baseSrc={assetUrl(LAYERED_SOURCES.profile.base)}
+              maskSrc={assetUrl(LAYERED_SOURCES.profile.mask)}
+              paintColor={paint.color}
+              alt={`Licensed compact electric SUV reference in side profile, ${paint.label ?? "selected paint"}`}
+              onReady={() => setAssetState("profile", "ready")}
               onError={() => setAssetState("profile", "fallback")}
             />
             <img

@@ -51,7 +51,7 @@ describe("VehicleCanvas live camera reset contract", () => {
     const liveScene = await screen.findByTestId("live-camera-reset-revision");
     const canvas = screen.getByRole("region", { name: "Interactive vehicle configurator" });
     const authoredProfile = screen
-      .getByAltText("Licensed compact electric SUV reference in side profile")
+      .getByAltText(/Licensed compact electric SUV reference in side profile/i)
       .closest(".vc-profile-view");
 
     expect(canvas).toHaveAttribute("data-live-status", "loading");

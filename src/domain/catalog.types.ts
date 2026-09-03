@@ -74,6 +74,14 @@ export interface CatalogProduct {
   data_as_of: string;
   sources: SourceId[];
   disclaimer?: string;
+  /**
+   * Whether the catalog describes an actual vehicle or one modelled on
+   * published figures. Under "modelled", the sources are the BASIS for the
+   * numbers rather than a citation of this vehicle, so no vehicle figure may
+   * claim "verified" confidence. Incentive programs are unaffected: they are
+   * real regardless of which vehicle qualifies for them.
+   */
+  representation?: "actual" | "modelled";
   assembly?: {
     country?: string;
     plant?: string;

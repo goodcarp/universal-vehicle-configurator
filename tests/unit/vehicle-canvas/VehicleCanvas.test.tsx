@@ -235,7 +235,7 @@ describe("VehicleCanvas", () => {
       />,
     );
 
-    fireEvent.error(screen.getByAltText("Licensed compact electric SUV reference in side profile"));
+    fireEvent.error(screen.getByAltText(/Licensed compact electric SUV reference in side profile/i));
 
     expect(screen.getByText("Vehicle view unavailable")).toBeVisible();
     expect(screen.getByText("Configuration controls remain active.")).toBeVisible();

@@ -20,7 +20,7 @@ import {
 } from "three";
 import { getCameraPose } from "./camera-presets";
 import { CabinInterior } from "./CabinInterior";
-import { LicensedVehicleModel } from "./LicensedVehicleModel";
+import { resolveVehicleModelSource } from "./vehicle-model-source";
 import type {
   LiveVehicleRenderMode,
   LiveVehicleViewportProps,
@@ -217,6 +217,9 @@ function Studio({
 }
 
 function VehicleScene(props: LiveVehicleViewportProps) {
+  // Whichever body is registered for this source draws the vehicle; camera,
+  // lighting, blueprint mode, focus and the cabin are all source-agnostic.
+  const { Component: VehicleBody } = resolveVehicleModelSource(props.modelSource);
   // Interior swaps the exterior shell for the cabin rather than drawing one
   // inside the other: from a camera in the driver's seat the body's front
   // faces are culled anyway, so keeping it would just leak the studio in.
@@ -228,7 +231,7 @@ function VehicleScene(props: LiveVehicleViewportProps) {
       <group visible={!insideCabin}>
         <LicensedModelBoundary fallback={null} onFailure={props.onFailure}>
           <Suspense fallback={null}>
-            <LicensedVehicleModel
+            <VehicleBody
               paint={props.paint}
               wheel={props.wheel}
               accessories={props.accessories}

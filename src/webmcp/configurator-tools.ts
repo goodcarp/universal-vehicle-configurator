@@ -431,6 +431,14 @@ function compactConfiguration(state: ConfiguratorStoreState) {
       dataAsOf: state.catalog.product.data_as_of,
       assembly: state.catalog.product.assembly ?? null,
       disclaimer: state.catalog.product.disclaimer ?? null,
+      representation: state.catalog.product.representation ?? "actual",
+      // Tells an agent how to phrase a citation. Under "modelled" the sources
+      // back the figures rather than describe this vehicle, so a claim must be
+      // hedged accordingly. Incentive sources are unaffected.
+      provenanceNote:
+        state.catalog.product.representation === "modelled"
+          ? "Vehicle figures are modelled on the cited sources, not taken from this vehicle. Cite them as the basis. Incentive programs are real and cited directly."
+          : "Vehicle figures are taken from the cited sources for this vehicle.",
       sources: resolveSources(state.catalog, state.catalog.product.sources ?? []),
     },
     configuration: {

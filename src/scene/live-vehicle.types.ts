@@ -1,3 +1,5 @@
+import type { VehicleModelSourceId } from "./vehicle-model-source";
+
 export type LiveVehicleViewPreset = "angle" | "profile" | "wheel" | "interior";
 export type LiveVehicleFocus = "paint" | "charge-port" | "wheels" | "utility" | null;
 export type LiveVehicleRenderMode = "showroom" | "blueprint";
@@ -27,6 +29,8 @@ export type LiveVehicleViewportProps = Readonly<{
   wheel: LiveVehicleWheel;
   accessories: LiveVehicleAccessories;
   interior: LiveVehicleInterior;
+  /** Which registered body draws the vehicle. Defaults to the licensed GLB. */
+  modelSource?: VehicleModelSourceId;
   mode: LiveVehicleRenderMode;
   viewPreset: LiveVehicleViewPreset;
   focus: LiveVehicleFocus;

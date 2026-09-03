@@ -898,6 +898,38 @@
   color: rgba(23, 33, 29, 0.62);
 }
 
+/* Layered compositor: a near-white render plus an alpha mask of the paintable
+   body, tinted by multiply. Mask sizing mirrors the base's object-fit so the
+   two stay registered at any container size. */
+[data-layered-frame] {
+  position: absolute;
+  inset: 0;
+}
+
+.layered-frame__base,
+.layered-frame__paint {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+
+.layered-frame__base {
+  object-fit: contain;
+}
+
+.layered-frame__paint {
+  mix-blend-mode: multiply;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
 .vc-angle-view__image,
 .vc-profile-view__base,
 .vc-profile-view__blueprint {
