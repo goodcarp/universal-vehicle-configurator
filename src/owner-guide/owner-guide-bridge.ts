@@ -11,6 +11,8 @@ export type VehicleTwinTool =
   | "set_annotations"
   | "get_specification"
   | "measure"
+  | "set_camera"
+  | "orbit_camera"
   | "set_vehicle_context"
   | "reset";
 

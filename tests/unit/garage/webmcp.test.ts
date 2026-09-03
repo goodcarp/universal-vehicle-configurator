@@ -136,6 +136,25 @@ afterEach(() => {
 });
 
 describe("Garage direct WebMCP surface", () => {
+  it("does not publish its own tools when AutoLab has embedded it", async () => {
+    // Framed, the host page owns the agent surface and drives this drawing over
+    // the bridge. A second unguarded copy of these tools inside the iframe
+    // would let an agent reach set_vehicle_context directly and wedge the sync
+    // the host is maintaining.
+    const registerTool = vi.fn().mockResolvedValue(undefined);
+    document.modelContext = { registerTool };
+    const framed = vi.spyOn(window, "top", "get").mockReturnValue({} as Window);
+    try {
+      activeApi = installWebMCP(setupGarage()) as GarageApi;
+      await expect(activeApi.registration).resolves.toBe(false);
+      expect(registerTool).not.toHaveBeenCalled();
+      // The bridge is still installed, so the host loses nothing.
+      await expect(activeApi.call("get_state")).resolves.toMatchObject({ view: "iso" });
+    } finally {
+      framed.mockRestore();
+    }
+  });
+
   it("measures a part whose meshes hang off another group", async () => {
     // The real brakes are parented into the wheel hubs, so their own group is
     // empty. Measuring the group reports nothing and every tool built on it —
@@ -191,17 +210,37 @@ describe("Garage direct WebMCP surface", () => {
       changed: false,
     });
     await expect(activeApi.call("set_view", { view: "side" })).resolves.toMatchObject({ view: "side" });
-    await expect(activeApi.call("set_motion", { motion: "lights", on: true })).resolves.toEqual({ motion: "lights", on: true });
-    await expect(activeApi.call("set_camera", { elevation_deg: 30, distance_m: 6, orthographic: true })).resolves.toMatchObject({ elevation_deg: 30, distance_m: 6, orthographic: 1 });
+    // The reply carries every motion, not just the one asked about, because run
+    // and drive are coupled and a single-motion answer hides that.
+    await expect(activeApi.call("set_motion", { motion: "lights", on: true })).resolves.toMatchObject({
+      motion: "lights",
+      on: true,
+      motions: { lights: true },
+    });
+    await expect(activeApi.call("set_camera", { elevation_deg: 30, distance_m: 6, orthographic: true })).resolves.toMatchObject({ elevation_deg: 30, distance_m: 6, orthographic: true, orthographic_fraction: 1 });
     await expect(activeApi.call("orbit_camera", { d_azimuth_deg: 10, zoom: 0.8 })).resolves.toMatchObject({ azimuth_deg: 30 });
     await expect(activeApi.call("list_parts", { category: "chassis", detail: true })).resolves.toMatchObject({ count: 2, total_count: 3, parts: [{ id: "battery" }, { id: "brakes" }] });
     await expect(activeApi.call("get_part", { part: "Structural battery" })).resolves.toMatchObject({ id: "battery", bounds_m: expect.any(Object) });
     await expect(activeApi.call("frame_part", { part: "battery", margin: 0.5 })).resolves.toMatchObject({ part: "battery", camera: expect.any(Object) });
     await expect(activeApi.call("highlight_part", { part: "body" })).resolves.toEqual({ selected: "body", label: "Body shell" });
     await expect(activeApi.call("set_annotations", { visible: false })).resolves.toEqual({ annotations_visible: false });
-    await expect(activeApi.call("get_specification")).resolves.toEqual({ length: 4.715, width: 1.9 });
+    // The reply says what the numbers are and are not: lengths in metres, with
+    // the coordinate convention and the basis of the geometry stated, so an
+    // agent cannot read them as manufacturer CAD or as masses.
+    await expect(activeApi.call("get_specification")).resolves.toMatchObject({
+      units: "metres",
+      dimensions_m: { length: 4.715, width: 1.9 },
+      axes: expect.stringContaining("x forward"),
+      basis: expect.stringContaining("Not manufacturer CAD"),
+    });
     await expect(activeApi.call("measure", { from: "battery", to: "body" })).resolves.toMatchObject({ from: "battery", to: "body", distance_m: 2 });
-    await expect(activeApi.call("reset")).resolves.toEqual({ ok: true });
+    // reset reports the state it produced, like every other mutating tool here.
+    await expect(activeApi.call("reset")).resolves.toMatchObject({
+      ok: true,
+      view: "iso",
+      annotations_visible: true,
+      motions: { explode: false, open: false },
+    });
   });
 
   it("enforces schemas for direct calls and rejects stale or conflicting context", async () => {

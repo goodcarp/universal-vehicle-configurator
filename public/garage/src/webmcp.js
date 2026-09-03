@@ -47,10 +47,16 @@ function validateValue(value, schema, path) {
     if (!isRecord(value)) throw new TypeError(`${path} must be a JSON object.`);
     const properties = schema.properties || {};
     for (const required of schema.required || []) {
-      if (!(required in value)) throw new TypeError(`${path} requires ${required}.`);
+      // `required in value` is satisfied by a key explicitly set to undefined,
+      // which then skips validation below and lands in the tool as a hole.
+      if (value[required] === undefined) throw new TypeError(`${path} requires ${required}.`);
     }
     if (schema.additionalProperties === false) {
-      const unexpected = Object.keys(value).filter((key) => !(key in properties));
+      // `key in properties` walks the prototype chain, so `toString`,
+      // `constructor` and `valueOf` all read as declared properties and slip
+      // past a closed schema.
+      const unexpected = Object.keys(value)
+        .filter((key) => !Object.prototype.hasOwnProperty.call(properties, key));
       if (unexpected.length) {
         throw new TypeError(`${path} received unsupported field${unexpected.length === 1 ? '' : 's'}: ${unexpected.join(', ')}.`);
       }
@@ -98,6 +104,9 @@ export function installWebMCP(ctx) {
   let syncedContextRevision = null;
   let syncedContextFingerprint = null;
 
+  // Stated on every tool that returns a coordinate. Without it bounds_m and
+  // delta_m are numbers an agent cannot interpret.
+  const AXES = 'x forward (+x is the nose), y up (0 is the ground), z lateral (+z is the passenger side); metres';
   const partIds = () => vehicle.order.map((p) => p.name);
   const findPart = (name) => {
     if (!name) return null;
@@ -133,8 +142,11 @@ export function installWebMCP(ctx) {
     if (full) {
       d.description = p.desc;
       d.bounds_m = partBox(p);
+      d.axes = AXES;
       d.explode_offset_m = xyz(p.explode);
       d.visible = p.group.visible;
+      // Bounds are read off the live scene, so they move when the assembly does.
+      d.assembly = st.explodeOn ? 'exploded' : 'assembled';
     }
     return d;
   };
@@ -145,10 +157,23 @@ export function installWebMCP(ctx) {
     ui.showPanels(true); st.hidePanels = false; st.view = null;
   };
   const cameraState = () => ({
-    azimuth_deg: round(rig.cur.az % 360, 2), elevation_deg: round(rig.cur.el, 2),
-    distance_m: round(rig.cur.dist, 3), orthographic: round(rig.cur.ortho, 3),
+    // A heading, so never negative: JavaScript's % keeps the sign of the
+    // dividend, and an agent doing its own arithmetic on -38 instead of 322
+    // gets a different answer.
+    azimuth_deg: round(((rig.cur.az % 360) + 360) % 360, 2),
+    elevation_deg: round(rig.cur.el, 2),
+    distance_m: round(rig.cur.dist, 3),
+    // Reported as the fraction it is. It crosses the middle during the ortho
+    // fade, so a boolean here would be a lie for about half a second — but
+    // set_camera takes a boolean, so publish both and say which is which.
+    orthographic: round(rig.cur.ortho, 3) >= 0.5,
+    orthographic_fraction: round(rig.cur.ortho, 3),
     target_m: { x: round(rig.cur.tx || 0), y: round(rig.cur.ty), z: round(rig.cur.tz || 0) },
-    preset: rig.view, settled: rig.settled,
+    preset: rig.view,
+    // True once the camera has stopped moving. A hand-placed pose is settled
+    // the moment it is set — there is no tween to wait for — and reporting it
+    // as unsettled forever left an agent with no safe moment to capture.
+    settled: rig.settled || rig.view === null,
   });
 
   const TOOLS = [
@@ -218,13 +243,22 @@ export function installWebMCP(ctx) {
       annotations: SAFE_SET,
       run: ({ view }) => {
         if (!config.views.some((v) => v.id === view)) throw new Error(`unknown view "${view}"`);
-        setView(view); return { view, camera: cameraState() };
+        setView(view);
+        // The view transition tweens over about a second, so the camera has not
+        // moved yet. Returning cameraState() here reports the pose being left,
+        // which is the opposite of what was asked for.
+        return {
+          view,
+          camera: cameraState(),
+          camera_is: 'the pose being left; the view transition is still running',
+          settles_in_ms: 1150,
+        };
       },
     },
     {
       name: 'set_motion',
       title: 'Set digital twin motion',
-      description: 'Turn one of the sheet\'s motions on or off. run = idle telemetry and wheel spin; drive = rolling road with steering; lights = headlamp and tail-lamp beams; panels = dissolve the body shell to reveal the chassis; explode = separate every component along its assembly axis; open = swing the hood, liftgate, all four doors and the charge-port door.',
+      description: 'Turn one of the sheet\'s motions on or off. run = idle telemetry and wheel spin; drive = rolling road with steering; lights = headlamp and tail-lamp beams; panels = dissolve the body shell to reveal the chassis; explode = separate every component along its assembly axis; open = swing the hood, liftgate, all four doors and the charge-port door. run and drive are coupled: turning drive on turns run on, and turning run off turns drive off. The reply reports every motion, not just the one asked about, so the coupling is visible.',
       inputSchema: {
         type: 'object', required: ['motion'],
         properties: { motion: { type: 'string', enum: ['run', 'drive', 'lights', 'panels', 'explode', 'open'] }, on: { type: 'boolean', description: 'Omit to toggle.' } },
@@ -235,7 +269,8 @@ export function installWebMCP(ctx) {
         const cur = { run: st.run, drive: st.drive, lights: st.lights, panels: !st.panels, explode: st.explodeOn, open: st.openOn }[m];
         if (cur === undefined) throw new Error(`unknown motion "${m}"`);
         if (on === undefined || on !== cur) motion(m);
-        return { motion: m, on: { run: st.run, drive: st.drive, lights: st.lights, panels: !st.panels, explode: st.explodeOn, open: st.openOn }[m] };
+        const now = { run: st.run, drive: st.drive, lights: st.lights, panels: !st.panels, explode: st.explodeOn, open: st.openOn };
+        return { motion: m, on: now[m], motions: now };
       },
     },
     {
@@ -311,7 +346,7 @@ export function installWebMCP(ctx) {
       annotations: SAFE_SET,
       run: ({ part, azimuth_deg, elevation_deg, margin = 0.6 }) => {
         const p = findPart(part);
-        if (!p) throw new Error(`no part "${part}"`);
+        if (!p) throw new Error(`no part "${part}". Call list_parts for the ${vehicle.order.length} available ids.`);
         const b = partBox(p);
         if (!b) throw new Error(`"${p.name}" has no visible geometry right now — it may be hidden by PANELS.`);
         takeCamera(true);
@@ -337,7 +372,7 @@ export function installWebMCP(ctx) {
       annotations: SAFE_SET,
       run: ({ part }) => {
         const p = part ? findPart(part) : null;
-        if (part && !p) throw new Error(`no part "${part}"`);
+        if (part && !p) throw new Error(`no part "${part}". Call list_parts for the ${vehicle.order.length} available ids.`);
         ctx.select(p);
         return { selected: p ? p.name : null, label: p ? p.label : null };
       },
@@ -353,30 +388,46 @@ export function installWebMCP(ctx) {
     {
       name: 'get_specification',
       title: 'Get vehicle specification',
-      description: 'The published Rivian R2 figures the model is built to, in metres, kilograms and seconds. Every profile curve in the geometry is fitted to these plus Rivian\'s official orthographic drawings.',
+      description: 'The published Rivian R2 dimensions the model is built to. All values are lengths in metres — there are no masses or times here. Also returns the model\'s own derived coordinates (NOSE, TAIL, XF, XR: the x positions of the bumpers and axles), which is what part bounds and measurements are expressed against. The body is an independent reconstruction fitted to published dimensions and photographs, not manufacturer CAD.',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       annotations: READ_ONLY,
-      run: () => ({ ...vehicle.SPEC }),
+      run: () => ({
+        units: 'metres',
+        axes: AXES,
+        dimensions_m: { ...vehicle.SPEC },
+        basis: 'Independent reconstruction fitted to Rivian\'s published R2 dimensions and photographs. Not manufacturer CAD, not a scan.',
+      }),
     },
     {
       name: 'measure',
       title: 'Measure between digital twin parts',
-      description: 'Distance in metres between the centres of two components, plus the per-axis separation. Use it to check clearances and packaging.',
+      description: 'Distance in metres between the bounding-box CENTRES of two components, plus the per-axis separation. This is not a clearance: two parts that interpenetrate and two parts 200 mm apart can return the same distance. For clearance, read both parts\' bounds_m from get_part and compare the facing faces. Axes: x forward (+x is the nose), y up (0 is the ground), z lateral (+z is the passenger side).',
       inputSchema: { type: 'object', required: ['from', 'to'], properties: { from: { type: 'string', minLength: 1, maxLength: 80 }, to: { type: 'string', minLength: 1, maxLength: 80 } }, additionalProperties: false },
       annotations: READ_ONLY,
       run: ({ from, to }) => {
         const a = findPart(from), b = findPart(to);
-        if (!a || !b) throw new Error(`no part "${!a ? from : to}"`);
+        if (!a || !b) throw new Error(`no part "${!a ? from : to}". Call list_parts for the ${vehicle.order.length} available ids.`);
         const ba = partBox(a), bb = partBox(b);
         if (!ba || !bb) throw new Error('one of those parts has no visible geometry right now');
         const d = { x: round(bb.centre.x - ba.centre.x), y: round(bb.centre.y - ba.centre.y), z: round(bb.centre.z - ba.centre.z) };
-        return { from: a.name, to: b.name, delta_m: d, distance_m: round(Math.hypot(d.x, d.y, d.z)) };
+        // Explode and the panel dissolve move parts bodily. A measurement taken
+        // mid-explode is a real number about a pose nobody asked about, so say
+        // which pose it describes rather than let it read as the assembled car.
+        return {
+          from: a.name,
+          to: b.name,
+          axes: AXES,
+          delta_m: d,
+          distance_m: round(Math.hypot(d.x, d.y, d.z)),
+          measured_between: 'bounding-box centres, not nearest faces',
+          assembly: st.explodeOn ? 'exploded — parts are displaced along their assembly axes' : 'assembled',
+        };
       },
     },
     {
       name: 'reset',
       title: 'Reset digital twin presentation',
-      description: 'Return the sheet to how it opens: ISO view, shell on, nothing exploded or open, nothing selected.',
+      description: 'Return the sheet to how it opens: ISO view, shell on, nothing exploded or open, nothing selected. The ISO view drifts slowly by design, so the camera pose it returns to is not fixed.',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       annotations: SAFE_SET,
       run: () => {
@@ -387,7 +438,17 @@ export function installWebMCP(ctx) {
         }
         if (!st.panels) motion('panels');
         ui.setCards(true); setView('iso');
-        return { ok: true };
+        // Every other mutating tool here returns the state it produced. An
+        // acknowledgement forces a second call to find out what happened.
+        return {
+          ok: true,
+          view: 'iso',
+          motions: { run: st.run, drive: st.drive, lights: st.lights, panels: !st.panels, explode: st.explodeOn, open: st.openOn },
+          annotations_visible: true,
+          camera: cameraState(),
+          camera_is: 'the pose being left; the view transition is still running',
+          settles_in_ms: 1150,
+        };
       },
     },
   ];
@@ -433,7 +494,21 @@ export function installWebMCP(ctx) {
 
   // 3. modelContext — current hosts expose this on document; retain the
   // navigator fallback for proposal-era browsers.
-  const mc = document.modelContext || navigator.modelContext;
+  // Register only when the Garage is the page, not when AutoLab has embedded
+  // it. Framed, the host page owns the agent surface and drives this drawing
+  // over the bridge; publishing a second, unguarded copy of these tools from
+  // inside the iframe would let an agent reach set_vehicle_context directly and
+  // wedge the sync the host is maintaining. The postMessage bridge below is
+  // installed either way, which is how the host still reaches every tool.
+  const framed = (() => {
+    try {
+      return window.top !== window;
+    } catch {
+      // Cross-origin parent: we are certainly framed.
+      return true;
+    }
+  })();
+  const mc = framed ? null : (document.modelContext || navigator.modelContext);
   const registrationController = new AbortController();
   api.dispose = () => {
     registrationController.abort();

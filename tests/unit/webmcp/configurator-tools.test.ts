@@ -595,11 +595,16 @@ describe("real configurator Site Tools", () => {
       throw new Error(`unexpected test tool ${tool}`);
     });
     const syncContext = vi.fn().mockResolvedValue({ synced: true });
-    const setWorkspace = vi.fn();
+    // A real workspace, so the tools report the surface the page is actually on
+    // rather than the one they asked for several awaits earlier.
+    let workspace: "configure" | "garage" = "configure";
+    const setWorkspace = vi.fn((next: "configure" | "garage") => { workspace = next; });
+    const getWorkspace = vi.fn(() => workspace);
     dependencies.ownerGuide = {
       call,
       syncContext,
       setWorkspace,
+      getWorkspace,
     } as unknown as OwnerGuideBridge;
     const tools = toolsByName(dependencies);
     const controller = new AbortController();

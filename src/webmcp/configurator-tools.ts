@@ -1005,7 +1005,7 @@ export function createConfiguratorToolDefinitions(
     name: CONFIGURATOR_TOOL_NAMES[6],
     title: "Present vehicle configuration",
     description:
-      "Move the shared vehicle canvas to showroom or blueprint mode, choose an angle/profile/wheel/interior view, optionally focus a truthful vehicle hotspot, and open or close the body. This changes presentation only, never the selected build.",
+      "Move the CONFIGURE canvas to showroom or blueprint mode, choose an angle/profile/wheel/interior view, optionally focus a truthful vehicle hotspot, and open or close the body. This changes presentation only, never the selected build — and it only affects the Configure surface, so if the page is showing the Garage nothing visible happens. Use set_autolab_workspace first, or set_vehicle_twin_view to move the twin's camera instead.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1484,7 +1484,7 @@ export function createConfiguratorToolDefinitions(
     name: CONFIGURATOR_TOOL_NAMES[12],
     title: "Inspect a vehicle component",
     description:
-      "Open AutoLab Garage, find one named component, reveal it through the body when necessary, frame it with the camera, and highlight it with an authored technical leader.",
+      "Open AutoLab Garage, find one named component, reveal it through the body when necessary, frame it with the camera, and highlight it with an authored technical leader. Part ids come from list_vehicle_parts — call it first rather than guessing. This switches the page to Garage; set_autolab_workspace switches it back.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1557,7 +1557,7 @@ export function createConfiguratorToolDefinitions(
       return {
         ok: true,
         revision: state.domain.revision,
-        workspace: "garage",
+        workspace: bridge.getWorkspace(),
         part,
         frame,
       };
@@ -1606,7 +1606,7 @@ export function createConfiguratorToolDefinitions(
         );
         assertTwinRevision(state.domain.revision, toolName);
       }
-      return { ok: true, revision: state.domain.revision, workspace: "garage", view };
+      return { ok: true, revision: state.domain.revision, workspace: bridge.getWorkspace(), view };
     },
   };
 
@@ -1647,7 +1647,7 @@ export function createConfiguratorToolDefinitions(
         { signal: options?.signal },
       );
       assertTwinRevision(state.domain.revision, toolName);
-      return { ok: true, revision: state.domain.revision, workspace: "garage", ...result };
+      return { ok: true, revision: state.domain.revision, workspace: bridge.getWorkspace(), ...result };
     },
   };
 
