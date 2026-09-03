@@ -8,8 +8,7 @@ import {
   type VehicleHotspotId,
   type VehicleViewPreset,
 } from "../features/vehicle-canvas";
-import { SCENE_MANIFEST } from "../scene/scene-manifest";
-import { activeVehicleModelSource } from "../scene/vehicle-model-source";
+import { activeVehicleModelSource, anchorsFor } from "../scene/vehicle-model-source";
 import { AgentActivity } from "./AgentActivity";
 import { IncentiveSummary } from "./IncentiveSummary";
 import { ToolStatus } from "./ToolStatus";
@@ -70,6 +69,19 @@ export function App() {
   const [dismissedReceiptId, setDismissedReceiptId] = useState<string | null>(null);
   const [siteTools, setSiteTools] = useState<ConfiguratorSiteToolsStatus>(INITIAL_TOOL_STATUS);
   const [presentation, setPresentation] = useState(() => configuratorPresentation.getState());
+
+  // Tell the agent surface what the viewport actually mounted. The webmcp layer
+  // deliberately knows nothing about the renderer, so the page reports it.
+  useEffect(() => {
+    const body = activeVehicleModelSource();
+    configuratorPresentation.describeBody({
+      id: body.id,
+      label: body.sceneTitle,
+      representsConfiguredVehicle: body.id !== "licensed-glb",
+      basis: body.credit.text.replace(/^Model:\s*/u, ""),
+      canOpen: body.hasOpenableBody,
+    });
+  }, []);
   const [changeNotice, setChangeNotice] = useState<ChangeNotice | null>(null);
   const [shareStatus, setShareStatus] = useState<"idle" | "copied">("idle");
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -183,33 +195,35 @@ export function App() {
     return nextPresentation;
   }, []);
 
+  const bodySource = activeVehicleModelSource();
+  const anchors = anchorsFor(bodySource);
   const hotspots: VehicleHotspot[] = [
     {
       id: "paint",
       label: "Exterior finish",
-      detail: `${paintOption?.label ?? "Representative finish"} · selection rendered on ${activeVehicleModelSource().hotspotBasis}`,
-      anchor: SCENE_MANIFEST.anchors.bodyPaint,
+      detail: `${paintOption?.label ?? "Representative finish"} · selection rendered on ${bodySource.hotspotBasis}`,
+      anchor: anchors.bodyPaint,
       accuracy: "representative",
     },
     {
       id: "charge-port",
       label: "Charging setup",
       detail: "Home-charging setup is tracked outside vehicle MSRP.",
-      anchor: SCENE_MANIFEST.anchors.chargePort,
+      anchor: anchors.chargePort,
       accuracy: "representative",
     },
     {
       id: "wheels",
       label: "Wheel package",
       detail: `${wheelOption?.label ?? "Representative wheel"} · ${wheel.diameterInches} in`,
-      anchor: SCENE_MANIFEST.anchors.frontWheel,
+      anchor: anchors.frontWheel,
       accuracy: "representative",
     },
     {
       id: "utility",
       label: "Rear utility",
       detail: towingOption?.label ?? "No tow package selected",
-      anchor: SCENE_MANIFEST.anchors.rearHitch,
+      anchor: anchors.rearHitch,
       accuracy: "representative",
     },
   ];

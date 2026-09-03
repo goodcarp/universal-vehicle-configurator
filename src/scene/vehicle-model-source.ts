@@ -1,5 +1,6 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 import type { CameraRigId } from "./camera-presets";
+import { SCENE_MANIFEST, type NormalizedAnchor } from "./scene-manifest";
 import type {
   LiveVehicleAccessories,
   LiveVehicleFocus,
@@ -73,6 +74,15 @@ export interface VehicleModelSource {
   hasCabin?: boolean;
   /** Which camera rig frames this body. Rigs are per-vehicle, not per-scale. */
   cameraRig?: CameraRigId;
+  /**
+   * Where the hotspot markers sit, as a fraction of the stage.
+   *
+   * They are flat overlays, not projected from the scene, so they are only ever
+   * right for one framing — the default angle view — and they are pinned to a
+   * particular silhouette. Swap the body and they point at nothing, which is
+   * why each body brings its own.
+   */
+  anchors?: Readonly<Record<"frontWheel" | "bodyPaint" | "chargePort" | "rearHitch", NormalizedAnchor>>;
   Component: VehicleModelComponent;
 }
 
@@ -102,12 +112,24 @@ export const VEHICLE_MODEL_SOURCES: Record<VehicleModelSourceId, VehicleModelSou
     sceneTitle: "Rivian R2 · code-native body",
     hotspotBasis: "the code-native R2 body",
     credit: {
-      text: "Model: generated in code from the R2 general-arrangement drawing · A. Carpenter",
+      // "General-arrangement drawing" reads as a manufacturer engineering
+      // release. It is not one: the body is fitted in code to Rivian's
+      // published dimensions with photo-derived surfacing, which is a weaker
+      // and more honest claim.
+      text: "Model: generated in code from published R2 dimensions · A. Carpenter",
     },
-    attribution: "Code-native R2 · built from the general-arrangement drawing",
+    attribution: "Code-native R2 · fitted to published dimensions, not a scan",
     hasOpenableBody: true,
     hasCabin: true,
     cameraRig: "r2",
+    // Measured off the R2's own angle view: it is a longer, taller car and it
+    // sits differently in frame than the reference body.
+    anchors: {
+      frontWheel: { x: 0.607, y: 0.665 },
+      bodyPaint: { x: 0.425, y: 0.470 },
+      chargePort: { x: 0.152, y: 0.495 },
+      rearHitch: { x: 0.140, y: 0.610 },
+    },
     Component: lazy(async () => ({
       default: (await import("./R2VehicleModel")).R2VehicleModel,
     })),
@@ -140,6 +162,11 @@ export function activeVehicleModelSource(): VehicleModelSource {
   return resolveVehicleModelSource(
     REQUESTED_VEHICLE_MODEL_SOURCE ?? DEFAULT_VEHICLE_MODEL_SOURCE,
   );
+}
+
+/** The hotspot anchors for a body, falling back to the manifest's own. */
+export function anchorsFor(source: VehicleModelSource) {
+  return source.anchors ?? SCENE_MANIFEST.anchors;
 }
 
 export function resolveVehicleModelSource(

@@ -1,6 +1,7 @@
 import {
   Color,
   DoubleSide,
+  type Group,
   LatheGeometry,
   type Material,
   Mesh,
@@ -29,7 +30,7 @@ import { CUT, SPEC, type R2Vehicle } from "./vehicle.js";
  * than one wheel-shaped lump.
  */
 
-export type RimFinish = "bicolor" | "dark" | "bright";
+export type RimFinish = "tungsten" | "blackSand" | "bicolor" | "graphite";
 
 export interface ShowroomOptions {
   paintColor: string;
@@ -79,6 +80,7 @@ type Role =
   | "carrier"
   | "cabin"
   | "cabinDark"
+  | "screen"
   | "sensor";
 
 /**
@@ -93,7 +95,15 @@ const ROLE_BY_MESH: Record<string, Role> = {
   hood: "paint",
   "hood#2": "chrome",
   tailgate: "paint",
+  // Sub 1 is the backlight: the greenhouse's own section lofted on aft of where
+  // the greenhouse itself stops. On paint it is a body-coloured panel filling
+  // the bottom of the rear window, with a hard seam where the two meet.
+  "tailgate#1": "glass",
+  "tailgate#3": "trim",
+  "tailgate#4": "chrome",
+  "tailgate#5": "chrome",
   "tailgate#6": "trim",
+  "tailgate#7": "reflector",
   // Each door carries its own glazing and trim, so a door is not one material.
   // Sub 1 is the window panel: leaving it on paint puts a body-coloured
   // rectangle over every window, sitting proud of the greenhouse behind it.
@@ -101,24 +111,24 @@ const ROLE_BY_MESH: Record<string, Role> = {
   "doorFL#1": "glass",
   "doorFL#3": "cabin",
   "doorFL#4": "cabinDark",
-  "doorFL#5": "chrome",
+  "doorFL#5": "paint",
   "doorFL#6": "gloss",
   doorFR: "paint",
   "doorFR#1": "glass",
   "doorFR#3": "cabin",
   "doorFR#4": "cabinDark",
-  "doorFR#5": "chrome",
+  "doorFR#5": "paint",
   "doorFR#6": "gloss",
   doorRL: "paint",
   "doorRL#1": "glass",
   "doorRL#3": "cabin",
   "doorRL#4": "cabinDark",
-  "doorRL#5": "chrome",
+  "doorRL#5": "paint",
   doorRR: "paint",
   "doorRR#1": "glass",
   "doorRR#3": "cabin",
   "doorRR#4": "cabinDark",
-  "doorRR#5": "chrome",
+  "doorRR#5": "paint",
   chargePort: "paint",
 
   // glasshouse
@@ -153,6 +163,11 @@ const ROLE_BY_MESH: Record<string, Role> = {
 
   // cabin
   dash: "cabin",
+  // The two screens are not upholstery. Left on the cabin material they take
+  // the buyer's chosen trim colour, so picking a light interior tints the
+  // instrument cluster.
+  "dash#1": "screen",
+  "dash#2": "screen",
   seats: "cabin",
   steeringWheel: "cabinDark",
   cargo: "cabinDark",
@@ -161,6 +176,7 @@ const ROLE_BY_MESH: Record<string, Role> = {
   cargoFloor: "cabinDark",
   frunkFloor: "cabinDark",
   inlet: "trim",
+  "inlet#5": "lampEmitter",
 
   // brakes
   brakes: "disc",
@@ -181,11 +197,37 @@ const WHEEL_ROLE: Record<number, Role> = {
   6: "lug",
 };
 
+/**
+ * One entry per wheel the catalog actually sells.
+ *
+ * None of the four is polished chrome, so there is no "bright" here: Liquid
+ * Tungsten is a dark satin, Black Sand is near-black, and the two machined
+ * finishes are brighter on the face than in the pockets without ever becoming
+ * a mirror. Mapping them through a generic aero/sport/terrain style put the two
+ * darkest wheels on the brightest material.
+ */
 const RIM_FINISH: Record<RimFinish, { color: string; metalness: number; roughness: number }> = {
-  bicolor: { color: "#b9bfc2", metalness: 0.95, roughness: 0.24 },
-  dark: { color: "#3a3f42", metalness: 0.9, roughness: 0.36 },
-  bright: { color: "#e3e8ea", metalness: 1.0, roughness: 0.11 },
+  tungsten: { color: "#6e767b", metalness: 0.92, roughness: 0.33 },
+  blackSand: { color: "#2a2e30", metalness: 0.86, roughness: 0.46 },
+  bicolor: { color: "#8e979c", metalness: 0.96, roughness: 0.23 },
+  graphite: { color: "#575f63", metalness: 0.94, roughness: 0.30 },
 };
+
+/** The catalog's wheel ids, so the render matches the option by name. */
+const RIM_FINISH_BY_OPTION: Record<string, RimFinish> = {
+  "wheels.lt21_as": "tungsten",
+  "wheels.bs20_at": "blackSand",
+  "wheels.bc20_as": "bicolor",
+  "wheels.mg19_as": "graphite",
+};
+
+export function rimFinishFor(optionId: string | undefined, style: string): RimFinish {
+  const byOption = optionId ? RIM_FINISH_BY_OPTION[optionId] : undefined;
+  if (byOption) return byOption;
+  // A wheel this build does not know falls back on its style, which is coarse
+  // but never lands on a finish the catalog does not sell.
+  return style === "terrain" ? "blackSand" : style === "sport" ? "bicolor" : "tungsten";
+}
 
 /**
  * Shade every surface as what it is: an outside and an inside.
@@ -207,13 +249,16 @@ const RIM_FINISH: Record<RimFinish, { color: string; metalness: number; roughnes
  * any liner you could model: the inside of a body really is a hole light does
  * not reach.
  *
- * It applies only to the cut shells. Winding is not consistent across the
- * drawing — several bolt-on panels are built inside-out, which is invisible
- * under double-sided lighting but makes `gl_FrontFacing` report backwards — so
- * a blanket rule paints the hood and doors black. The lofted shells are both
- * correctly wound and the only parts you ever see the inside of.
+ * It applies to the painted shell alone. Winding is not consistent across the
+ * drawing — several bolt-on panels are built inside-out, and the two pillar
+ * surrounds are generated by walking the section in opposite directions, so one
+ * of them is mirrored too. That is invisible under double-sided lighting but
+ * makes `gl_FrontFacing` report backwards, so a blanket rule paints the hood
+ * and doors black and darkens one side's pillar and not the other. The body
+ * loft is correctly wound, and it is the only surface you ever genuinely look
+ * into — through the wheel arches.
  */
-function patchShell<T extends Material>(material: T, aperture: boolean): T {
+function patchShell<T extends Material>(material: T, aperture: boolean, cavity = false): T {
   material.onBeforeCompile = (shader) => {
     if (aperture) {
       shader.vertexShader = `varying vec3 vObjPos;\n${shader.vertexShader}`.replace(
@@ -224,16 +269,21 @@ function patchShell<T extends Material>(material: T, aperture: boolean): T {
         `varying vec3 vObjPos;\n${cutGLSL(CUT)}\n${shader.fragmentShader}`.replace(
           "#include <clipping_planes_fragment>",
           "#include <clipping_planes_fragment>\n\tif (inAperture(vObjPos)) discard;",
-        )
-        .replace(
-          "#include <dithering_fragment>",
-          "#include <dithering_fragment>\n\tif (!gl_FrontFacing) gl_FragColor.rgb *= 0.085;",
         );
     }
+    if (cavity) {
+      // Before tone mapping, so the factor is a real drop in radiance rather
+      // than a multiply against an already display-encoded value.
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <tonemapping_fragment>",
+        "\tif (!gl_FrontFacing) gl_FragColor.rgb *= 0.16;\n#include <tonemapping_fragment>",
+      );
+    }
   };
-  // The cut and uncut variants must not share a compiled program, or whichever
-  // compiles first decides whether the apertures exist.
-  material.customProgramCacheKey = () => (aperture ? "r2-shell-cut" : "r2-shell");
+  // Each combination must have its own compiled program, or whichever compiles
+  // first decides whether the apertures and the cavity exist for all of them.
+  material.customProgramCacheKey = () =>
+    `r2-shell${aperture ? "-cut" : ""}${cavity ? "-cavity" : ""}`;
   return material;
 }
 
@@ -254,7 +304,7 @@ function doubleSided<T extends Material>(materials: Record<string, T>): Record<s
 }
 
 function buildMaterials(options: ShowroomOptions): Record<Role, Material> {
-  const rim = RIM_FINISH[options.rimFinish] ?? RIM_FINISH.bicolor;
+  const rim = RIM_FINISH[options.rimFinish] ?? RIM_FINISH.tungsten;
   const lamp = options.lampsOn ? 1 : 0;
 
   // Automotive paint is a metallic basecoat under a smooth dielectric layer.
@@ -283,14 +333,17 @@ function buildMaterials(options: ShowroomOptions): Record<Role, Material> {
   return doubleSided({
     paint,
     roof: roofPaint,
-    // Gloss black for the pillars and recesses: same coat, no flake.
+    // Gloss black for the pillars and recesses: same coat, no flake. Held well
+    // off a mirror finish deliberately — a true gloss pillar reflects the
+    // studio ceiling almost perfectly, and a white A-pillar loses the blacked-
+    // out greenhouse that gives this car its floating roof.
     gloss: new MeshPhysicalMaterial({
-      color: new Color("#0b0d0e"),
+      color: new Color("#080a0b"),
       metalness: 0.1,
-      roughness: 0.075,
+      roughness: 0.24,
       clearcoat: 1,
-      clearcoatRoughness: 0.03,
-      envMapIntensity: 1.7,
+      clearcoatRoughness: 0.14,
+      envMapIntensity: 0.85,
       side: DoubleSide,
     }),
     trim: new MeshStandardMaterial({
@@ -348,7 +401,10 @@ function buildMaterials(options: ShowroomOptions): Record<Role, Material> {
     lampEmitter: new MeshStandardMaterial({
       color: new Color("#dceaf5"),
       emissive: new Color("#bcdcff"),
-      emissiveIntensity: 0.35 + lamp * 3.1,
+      // Held below full blow-out. These are daytime running lamps in a lit
+      // studio, not headlights on main beam at night, and untoned emissive at
+      // 3+ turns the whole lamp into a white slab with no visible internals.
+      emissiveIntensity: 0.3 + lamp * 1.45,
       metalness: 0.1,
       roughness: 0.2,
       toneMapped: false,
@@ -356,7 +412,7 @@ function buildMaterials(options: ShowroomOptions): Record<Role, Material> {
     tailEmitter: new MeshStandardMaterial({
       color: new Color("#7a0f0c"),
       emissive: new Color("#ff2a18"),
-      emissiveIntensity: 0.5 + lamp * 2.6,
+      emissiveIntensity: 0.45 + lamp * 1.35,
       metalness: 0.1,
       roughness: 0.25,
       toneMapped: false,
@@ -419,19 +475,32 @@ function buildMaterials(options: ShowroomOptions): Record<Role, Material> {
       metalness: 0.85,
       roughness: 0.55,
     }),
+    // Barely any environment. The cabin is a closed box: it cannot see the
+    // studio, and letting it try lifts a near-black trim to pale khaki, which
+    // is the one thing an interior view must not do to the colour someone
+    // just chose.
     cabin: new MeshStandardMaterial({
       color: new Color(options.cabinColor),
       metalness: 0.02,
-      roughness: 0.78,
-      envMapIntensity: 0.7,
+      roughness: 0.82,
+      envMapIntensity: 0.14,
       side: DoubleSide,
     }),
     cabinDark: new MeshStandardMaterial({
       color: new Color("#14171a"),
       metalness: 0.05,
-      roughness: 0.85,
-      envMapIntensity: 0.5,
+      roughness: 0.88,
+      envMapIntensity: 0.1,
       side: DoubleSide,
+    }),
+    // Displays read as near-black glass with their own faint glow, not as trim.
+    screen: new MeshStandardMaterial({
+      color: new Color("#0a0d10"),
+      emissive: new Color("#22303a"),
+      emissiveIntensity: 0.55,
+      metalness: 0.1,
+      roughness: 0.09,
+      envMapIntensity: 1.2,
     }),
     sensor: new MeshStandardMaterial({
       color: new Color("#05070a"),
@@ -446,6 +515,20 @@ export interface ShowroomHandle {
   paint: MeshPhysicalMaterial;
   caliper: MeshPhysicalMaterial;
   cabin: MeshStandardMaterial;
+  /**
+   * The showroom detail, unattached. The caller parents it, so a render that
+   * React discards never leaves a group hanging off the drawing.
+   */
+  detail: Group;
+  /**
+   * Run `fn` over every material this handle owns, cut clones included.
+   *
+   * The clones are separate instances: a write to a base material does not
+   * reach them. Colour is the one exception, because a twin shares the Color
+   * object it was cloned from. Anything else — wireframe, most obviously — has
+   * to go through here, or half the car ignores it.
+   */
+  forEachMaterial(fn: (material: Material) => void): void;
   dispose(): void;
 }
 
@@ -461,10 +544,10 @@ export function dressForShowroom(vehicle: R2Vehicle, options: ShowroomOptions): 
   // Every material needs a cut twin, because the same paint appears on both cut
   // shells and uncut panels.
   const cutTwins = new Map<Material, Material>();
-  const cutVariant = (material: Material) => {
+  const cutVariant = (material: Material, cavity: boolean) => {
     const existing = cutTwins.get(material);
     if (existing) return existing;
-    const twin = patchShell(material.clone(), true);
+    const twin = patchShell(material.clone(), true, cavity);
     // The twin has to keep sharing its colour with the original, not a copy of
     // it: the body shell is the cut variant of the paint, so a cloned colour
     // means changing the paint repaints the doors and leaves the shell behind.
@@ -491,26 +574,30 @@ export function dressForShowroom(vehicle: R2Vehicle, options: ShowroomOptions): 
         ? WHEEL_ROLE[sub] ?? "rim"
         : ROLE_BY_MESH[`${part.name}#${sub}`] ?? ROLE_BY_MESH[part.name] ?? "trim";
       const material = base[role];
-      mesh.material = mesh.userData.cut ? cutVariant(material) : material;
+      mesh.material = mesh.userData.cut ? cutVariant(material, role === "paint") : material;
       mesh.castShadow = part.category !== "interior";
       mesh.receiveShadow = false;
     }
   }
 
-  // Lamp internals are a showroom concern, so they are built here and parented
-  // to the body rather than pushed back into the engineering source.
+  // Lamp internals are a showroom concern, so they are built here rather than
+  // pushed back into the engineering source. Attaching is the caller's job.
   const detail = buildDetailGroup({
     reflector: base.chrome,
     emitter: base.lampEmitter,
     bezel: base.gloss,
   });
-  vehicle.body.add(detail);
 
   return {
     materials: base,
     paint: base.paint as MeshPhysicalMaterial,
     caliper: base.caliper as MeshPhysicalMaterial,
     cabin: base.cabin as MeshStandardMaterial,
+    detail,
+    forEachMaterial(fn) {
+      for (const material of Object.values(base)) fn(material);
+      for (const material of cutTwins.values()) fn(material);
+    },
     dispose() {
       detail.removeFromParent();
       (detail.userData.dispose as (() => void) | undefined)?.();

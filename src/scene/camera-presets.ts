@@ -101,15 +101,16 @@ const R2: CameraRig = {
       maxDistance: 12.5,
     },
     wheel: R2_WHEEL,
-    // Driver's eye. The seat back is at x -0.39 and the wheel rim at x 0.10, so
-    // the eye sits between them at -0.12 rather than on the cushion: put it any
-    // further back and the camera is inside the backrest, which is what fills
-    // the frame with a dark slab.
+    // A cabin view, not a strict driver's eye. Sat at the front seats the dash
+    // is 600 mm away and fills the frame with one slab; from between the rows,
+    // slightly high and over the driver's shoulder, the whole front cabin reads
+    // at once — wheel, dash, centre screen and both seats — which is what
+    // someone choosing an interior is actually trying to see.
     interior: {
-      position: [-0.09, 1.34, -0.31],
-      target: [1.20, 0.98, 0.04],
-      minDistance: 0.5,
-      maxDistance: 3.2,
+      position: [-1.42, 1.52, -0.52],
+      target: [0.42, 0.92, 0.14],
+      minDistance: 0.6,
+      maxDistance: 3.4,
     },
   },
   focusPoses: {

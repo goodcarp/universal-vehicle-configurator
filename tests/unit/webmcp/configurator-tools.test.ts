@@ -353,6 +353,8 @@ describe("real configurator Site Tools", () => {
     const unsubscribe = dependencies.presentation.subscribe(listener);
     const tool = toolsByName(dependencies).get("present_vehicle_configuration");
 
+    // Asking for the angle view in blueprint mode gets the profile instead, and
+    // the tool says so rather than returning a state that quietly disagrees.
     expect(
       tool?.execute({ mode: "blueprint", viewPreset: "angle", focus: "wheels" }),
     ).toEqual({
@@ -365,6 +367,13 @@ describe("real configurator Site Tools", () => {
         focus: "wheels",
         bodyOpen: false,
       },
+      unapplied: [
+        {
+          field: "viewPreset",
+          requested: "angle",
+          reason: "Blueprint mode only draws the profile and wheel views.",
+        },
+      ],
     });
     expect(listener).toHaveBeenLastCalledWith(
       expect.objectContaining({ mode: "blueprint", viewPreset: "profile" }),
@@ -432,6 +441,80 @@ describe("real configurator Site Tools", () => {
       focus: "none",
       bodyOpen: false,
     });
+  });
+
+  it("refuses to open a body that cannot open, and says so", () => {
+    const dependencies = setup();
+    dependencies.presentation.describeBody({
+      id: "licensed-glb",
+      label: "Licensed compact-SUV reference",
+      representsConfiguredVehicle: false,
+      basis: "Licensed exterior scan of a different vehicle.",
+      canOpen: false,
+    });
+    const tools = toolsByName(dependencies);
+
+    expect(tools.get("present_vehicle_configuration")?.execute({ bodyOpen: true })).toEqual({
+      ok: true,
+      changed: false,
+      presentation: expect.objectContaining({ bodyOpen: false }),
+      unapplied: [
+        {
+          field: "bodyOpen",
+          requested: true,
+          reason:
+            "The body on screen (Licensed compact-SUV reference) has no openable doors, frunk or liftgate.",
+        },
+      ],
+    });
+  });
+
+  it("shuts an already-open body when a body that cannot open takes over", () => {
+    const controller = createConfiguratorPresentationController();
+    controller.describeBody({
+      id: "r2-engineering",
+      label: "Rivian R2",
+      representsConfiguredVehicle: true,
+      basis: "Generated in code.",
+      canOpen: true,
+    });
+    expect(controller.present({ bodyOpen: true }).bodyOpen).toBe(true);
+
+    controller.describeBody({
+      id: "licensed-glb",
+      label: "Licensed compact-SUV reference",
+      representsConfiguredVehicle: false,
+      basis: "Licensed exterior scan.",
+      canOpen: false,
+    });
+    expect(controller.getState().bodyOpen).toBe(false);
+  });
+
+  it("tells an agent which body is on screen", async () => {
+    const dependencies = setup();
+    dependencies.presentation.describeBody({
+      id: "licensed-glb",
+      label: "Licensed compact-SUV reference",
+      representsConfiguredVehicle: false,
+      basis: "Licensed exterior scan of a different vehicle.",
+      canOpen: false,
+    });
+
+    const snapshot = await toolsByName(dependencies)
+      .get("get_vehicle_configuration")
+      ?.execute({});
+
+    // An agent describing what the person is looking at needs to know the
+    // picture is not the car being configured.
+    expect(snapshot).toEqual(
+      expect.objectContaining({
+        renderedBody: expect.objectContaining({
+          id: "licensed-glb",
+          representsConfiguredVehicle: false,
+          canOpen: false,
+        }),
+      }),
+    );
   });
 
   it("rejects a non-boolean bodyOpen", () => {

@@ -1546,3 +1546,61 @@
 .vc-mode-switch--open {
   margin-left: 0.5rem;
 }
+
+/*
+ * Interior legibility on the live path.
+ *
+ * The interior treatment above is scoped to the authored still because, when it
+ * was written, the live interior view swapped the body for a light stand-in
+ * cabin. A body that carries its own cabin is dark inside, so the HUD's
+ * showroom-weight type now sits as dark grey on near-black. These rules restate
+ * only the legibility part — not the stage background or the environment
+ * decorations, which the live canvas draws for itself.
+ */
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"][data-mode="showroom"] .vc-stage {
+  color: #ecf4ee;
+}
+
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-hud__identity > span:last-child,
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-hud__index,
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-status,
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-model-attribution,
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-footer {
+  color: rgba(224, 239, 229, 0.62);
+}
+
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-hud__identity strong {
+  color: #f2f8f4;
+}
+
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-mode-switch {
+  border-color: rgba(213, 232, 219, 0.15);
+  background: rgba(8, 12, 10, 0.64);
+}
+
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-mode-switch button {
+  color: rgba(225, 239, 229, 0.58);
+}
+
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-mode-switch button[aria-pressed="true"] {
+  color: #eef5f0;
+  background: rgba(103, 122, 109, 0.3);
+}
+
+/*
+ * The palette caption sits over the cabin itself on the live path, where its
+ * unbacked type lands on upholstery of roughly its own value. A soft scrim
+ * keeps it readable without putting a panel over the seat it is describing.
+ */
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-interior-view__caption {
+  padding: 0.5rem 0.72rem;
+  border-radius: 0.65rem;
+  background: linear-gradient(200deg, rgba(9, 13, 11, 0.72), rgba(9, 13, 11, 0.5));
+  backdrop-filter: blur(6px);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-interior-view__caption > span,
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-interior-view__caption small {
+  color: rgba(230, 241, 234, 0.78);
+}

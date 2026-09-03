@@ -63,8 +63,41 @@ export interface ConfiguratorPresentationPatch {
   bodyOpen?: boolean;
 }
 
+/**
+ * What is actually being drawn.
+ *
+ * An agent advising on paint, wheels or a charge-port location is reasoning
+ * about a picture it cannot see. Whether that picture is the vehicle being
+ * configured or a licensed stand-in of a different car changes what it can
+ * honestly say, so the fact is published rather than left implicit.
+ *
+ * It lives here, not in the scene layer, because the webmcp surface must not
+ * depend on the renderer. The app describes the body once on mount.
+ */
+export interface RenderedBodyDescriptor {
+  id: string;
+  label: string;
+  /** Whether the geometry on screen is the vehicle the catalog describes. */
+  representsConfiguredVehicle: boolean;
+  /** One line an agent can quote about where the geometry came from. */
+  basis: string;
+  /** Whether this body's doors, frunk and liftgate can open at all. */
+  canOpen: boolean;
+}
+
+const UNKNOWN_BODY: RenderedBodyDescriptor = {
+  id: "unknown",
+  label: "Vehicle body",
+  representsConfiguredVehicle: false,
+  basis: "The page has not yet reported which body is drawing.",
+  canOpen: true,
+};
+
 export interface ConfiguratorPresentationController {
   getState(): ConfiguratorPresentationState;
+  getBody(): RenderedBodyDescriptor;
+  /** Called by the page once it knows which body it mounted. */
+  describeBody(body: RenderedBodyDescriptor): void;
   present(
     patch: ConfiguratorPresentationPatch,
     options?: { signal?: AbortSignal },
@@ -543,6 +576,7 @@ export function createConfiguratorPresentationController(
     bodyOpen: initial.bodyOpen ?? false,
   };
   const listeners = new Set<(state: ConfiguratorPresentationState) => void>();
+  let body: RenderedBodyDescriptor = UNKNOWN_BODY;
 
   const update = (patch: ConfiguratorPresentationPatch) => {
     const mode = patch.mode ?? state.mode;
@@ -553,8 +587,11 @@ export function createConfiguratorPresentationController(
     if (mode === "showroom" && patch.viewPreset === "angle") viewPreset = "angle";
     const focus = patch.focus ?? state.focus;
     // Blueprint mode draws the body as a wireframe, where an open door reads as
-    // noise rather than as information, so the panels shut when it engages.
-    const bodyOpen = mode === "blueprint" ? false : patch.bodyOpen ?? state.bodyOpen;
+    // noise rather than as information, so the panels shut when it engages. A
+    // body with no openable panels can never be open either.
+    const bodyOpen = mode === "blueprint" || !body.canOpen
+      ? false
+      : patch.bodyOpen ?? state.bodyOpen;
     if (
       mode === state.mode
       && viewPreset === state.viewPreset
@@ -570,6 +607,13 @@ export function createConfiguratorPresentationController(
 
   return {
     getState: () => state,
+    getBody: () => body,
+    describeBody: (next) => {
+      body = next;
+      // Adopting a body that cannot open has to shut the panels, or the state
+      // keeps claiming an opening no one can see.
+      if (!next.canOpen && state.bodyOpen) update({ bodyOpen: false });
+    },
     present: (patch, options) => {
       throwIfAborted(options?.signal);
       return update(patch);
@@ -594,7 +638,7 @@ export function createConfiguratorToolDefinitions(
     name: CONFIGURATOR_TOOL_NAMES[0],
     title: "Get current vehicle configuration",
     description:
-      "Read the current vehicle build, buyer context, price, range, delivery status, revision, transaction status, and presentation state. Call this before making a change so expectedRevision is current.",
+      "Read the current vehicle build, buyer context, price, range, delivery status, revision, transaction status, presentation state, and which vehicle body is on screen. Check renderedBody before describing what the person is looking at: representsConfiguredVehicle is false when the viewport is showing a licensed stand-in of a different car rather than the vehicle being configured. Call this before making a change so expectedRevision is current.",
     inputSchema: EMPTY_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: false },
     execute: (input, options) => {
@@ -607,6 +651,7 @@ export function createConfiguratorToolDefinitions(
         ...compactConfiguration(state),
         transaction: transactionState(state),
         presentation: presentation.getState(),
+        renderedBody: presentation.getBody(),
       };
     },
   };
@@ -851,7 +896,7 @@ export function createConfiguratorToolDefinitions(
         bodyOpen: {
           type: "boolean",
           description:
-            "Swing the doors, frunk and liftgate open. Blueprint mode always shuts them.",
+            "Swing the doors, frunk and liftgate open. Refused, and reported back under `unapplied`, in blueprint mode or on a body with no openable panels — see renderedBody.canOpen from get_vehicle_configuration.",
         },
       },
       minProperties: 1,
@@ -900,7 +945,33 @@ export function createConfiguratorToolDefinitions(
         },
         { signal: options?.signal },
       );
-      return { ok: true, changed: next !== previous, presentation: next };
+      // Some requests are clamped rather than applied. Returning ok:true with a
+      // state that quietly disagrees with what was asked leaves an agent
+      // believing it opened a body that never moved, so say so.
+      const unapplied: { field: string; requested: unknown; reason: string }[] = [];
+      const body = presentation.getBody();
+      if (record.bodyOpen !== undefined && next.bodyOpen !== record.bodyOpen) {
+        unapplied.push({
+          field: "bodyOpen",
+          requested: record.bodyOpen,
+          reason: !body.canOpen
+            ? `The body on screen (${body.label}) has no openable doors, frunk or liftgate.`
+            : "Blueprint mode always shuts the body. Switch to showroom mode first.",
+        });
+      }
+      if (record.viewPreset !== undefined && next.viewPreset !== record.viewPreset) {
+        unapplied.push({
+          field: "viewPreset",
+          requested: record.viewPreset,
+          reason: "Blueprint mode only draws the profile and wheel views.",
+        });
+      }
+      return {
+        ok: true,
+        changed: next !== previous,
+        presentation: next,
+        ...(unapplied.length > 0 ? { unapplied } : {}),
+      };
     },
   };
 
