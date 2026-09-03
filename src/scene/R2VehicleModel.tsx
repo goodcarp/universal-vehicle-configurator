@@ -1,6 +1,7 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
-import { dressForShowroom, fitWheelDiameter } from "./r2/showroom";
+import type { Mesh } from "three";
+import { dressForShowroom, fitWheelDiameter, rimFinishFor } from "./r2/showroom";
 import { buildVehicle, SPEC } from "./r2/vehicle.js";
 import type { VehicleModelProps } from "./vehicle-model-source";
 
@@ -29,12 +30,6 @@ import type { VehicleModelProps } from "./vehicle-model-source";
  * it, so the two can be updated independently.
  */
 
-const RIM_FINISH_BY_STYLE = {
-  aero: "bicolor",
-  sport: "bright",
-  terrain: "dark",
-} as const;
-
 /** How far the doors, frunk and liftgate travel per second when they open. */
 const OPEN_RATE = 1.9;
 
@@ -59,7 +54,7 @@ export function R2VehicleModel({
   const showroom = useMemo(
     () => dressForShowroom(vehicle, {
       paintColor: paint.color,
-      rimFinish: RIM_FINISH_BY_STYLE[wheel.style] ?? "bicolor",
+      rimFinish: rimFinishFor(wheel.id, wheel.style),
       caliperColor: "#2b3033",
       cabinColor: interior?.color ?? "#22262a",
       lampsOn: true,
@@ -67,10 +62,31 @@ export function R2VehicleModel({
     // Colour changes are applied below without rebuilding; only the choices
     // that change a material's structure belong in here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [vehicle, wheel.style],
+    [vehicle, wheel.id, wheel.style],
   );
 
   useEffect(() => () => showroom.dispose(), [showroom]);
+
+  // The drawing owns several hundred geometries and its own shell materials, and
+  // R3F does not dispose what it did not create, so a <primitive> tree leaks its
+  // whole body on unmount unless someone frees it.
+  useEffect(() => () => {
+    vehicle.root.traverse((object) => {
+      const mesh = object as Mesh;
+      if (!mesh.isMesh) return;
+      mesh.geometry?.dispose();
+    });
+  }, [vehicle]);
+
+  // Parented here rather than inside dressForShowroom: attaching during render
+  // leaves a group hanging off the drawing for every render React discards.
+  useEffect(() => {
+    vehicle.body.add(showroom.detail);
+    invalidate();
+    return () => {
+      showroom.detail.removeFromParent();
+    };
+  }, [invalidate, showroom, vehicle]);
 
   useEffect(() => {
     showroom.paint.color.set(paint.color);
@@ -83,13 +99,23 @@ export function R2VehicleModel({
   }, [interior?.color, invalidate, showroom]);
 
   useEffect(() => {
-    for (const material of Object.values(showroom.materials)) {
+    // Through the handle, so the cut clones on the body shell, greenhouse and
+    // pillars switch too. Iterating the base materials alone leaves the four
+    // largest surfaces on the car shaded solid inside a wireframe.
+    showroom.forEachMaterial((material) => {
       (material as { wireframe?: boolean }).wireframe = blueprint;
-    }
+    });
     invalidate();
   }, [blueprint, invalidate, showroom]);
 
-  useEffect(() => fitWheelDiameter(vehicle, wheel.diameterInches), [vehicle, wheel.diameterInches]);
+  useEffect(() => {
+    const restore = fitWheelDiameter(vehicle, wheel.diameterInches);
+    invalidate();
+    return () => {
+      restore();
+      invalidate();
+    };
+  }, [invalidate, vehicle, wheel.diameterInches]);
 
   useEffect(() => {
     vehicle.parts.hitch?.group.scale.setScalar(accessories.towHitch ? 1 : 0);

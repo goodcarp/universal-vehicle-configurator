@@ -14,6 +14,10 @@ import {
 } from "../domain/ownership";
 import { resolveAtomicPatch } from "../domain/resolve";
 import {
+  ownerGuideBridge,
+  type VehicleTwinContext,
+} from "../owner-guide/owner-guide-bridge";
+import {
   configuratorMutations,
   configuratorStore,
   encodeShareState,
@@ -34,6 +38,12 @@ export const CONFIGURATOR_TOOL_NAMES = [
   "set_vehicle_buyer_context",
   "estimate_vehicle_ownership_cost",
   "compare_vehicle_configurations",
+  "get_vehicle_twin_state",
+  "list_vehicle_parts",
+  "inspect_vehicle_part",
+  "set_vehicle_twin_view",
+  "set_vehicle_twin_motion",
+  "measure_vehicle_parts",
 ] as const;
 
 export type ConfiguratorToolName = (typeof CONFIGURATOR_TOOL_NAMES)[number];
@@ -63,8 +73,41 @@ export interface ConfiguratorPresentationPatch {
   bodyOpen?: boolean;
 }
 
+/**
+ * What is actually being drawn.
+ *
+ * An agent advising on paint, wheels or a charge-port location is reasoning
+ * about a picture it cannot see. Whether that picture is the vehicle being
+ * configured or a licensed stand-in of a different car changes what it can
+ * honestly say, so the fact is published rather than left implicit.
+ *
+ * It lives here, not in the scene layer, because the webmcp surface must not
+ * depend on the renderer. The app describes the body once on mount.
+ */
+export interface RenderedBodyDescriptor {
+  id: string;
+  label: string;
+  /** Whether the geometry on screen is the vehicle the catalog describes. */
+  representsConfiguredVehicle: boolean;
+  /** One line an agent can quote about where the geometry came from. */
+  basis: string;
+  /** Whether this body's doors, frunk and liftgate can open at all. */
+  canOpen: boolean;
+}
+
+const UNKNOWN_BODY: RenderedBodyDescriptor = {
+  id: "unknown",
+  label: "Vehicle body",
+  representsConfiguredVehicle: false,
+  basis: "The page has not yet reported which body is drawing.",
+  canOpen: true,
+};
+
 export interface ConfiguratorPresentationController {
   getState(): ConfiguratorPresentationState;
+  getBody(): RenderedBodyDescriptor;
+  /** Called by the page once it knows which body it mounted. */
+  describeBody(body: RenderedBodyDescriptor): void;
   present(
     patch: ConfiguratorPresentationPatch,
     options?: { signal?: AbortSignal },
@@ -466,6 +509,28 @@ function compactConfiguration(state: ConfiguratorStoreState) {
   };
 }
 
+function vehicleTwinContext(state: ConfiguratorStoreState): VehicleTwinContext {
+  const selectedLabel = (groupId: string, fallback: string) => {
+    const ids = new Set(state.domain.selections[groupId] ?? []);
+    return state.catalog.options.find(
+      (option) => option.group === groupId && ids.has(option.id),
+    )?.label ?? fallback;
+  };
+
+  return {
+    build: selectedLabel("build", `${state.catalog.product.make} ${state.catalog.product.model}`),
+    paint: selectedLabel("paint", "Not supplied"),
+    wheels: selectedLabel("wheels", "Not supplied"),
+    interior: selectedLabel("interior", "Not supplied"),
+    rangeMiles:
+      typeof state.resolved.specs.range_mi === "number"
+        ? state.resolved.specs.range_mi
+        : null,
+    vehicleTotal: state.resolved.price.vehicleTotal,
+    revision: state.domain.revision,
+  };
+}
+
 function transactionState(state: ConfiguratorStoreState) {
   const canUndo =
     state.session.undo !== null &&
@@ -543,6 +608,7 @@ export function createConfiguratorPresentationController(
     bodyOpen: initial.bodyOpen ?? false,
   };
   const listeners = new Set<(state: ConfiguratorPresentationState) => void>();
+  let body: RenderedBodyDescriptor = UNKNOWN_BODY;
 
   const update = (patch: ConfiguratorPresentationPatch) => {
     const mode = patch.mode ?? state.mode;
@@ -553,8 +619,11 @@ export function createConfiguratorPresentationController(
     if (mode === "showroom" && patch.viewPreset === "angle") viewPreset = "angle";
     const focus = patch.focus ?? state.focus;
     // Blueprint mode draws the body as a wireframe, where an open door reads as
-    // noise rather than as information, so the panels shut when it engages.
-    const bodyOpen = mode === "blueprint" ? false : patch.bodyOpen ?? state.bodyOpen;
+    // noise rather than as information, so the panels shut when it engages. A
+    // body with no openable panels can never be open either.
+    const bodyOpen = mode === "blueprint" || !body.canOpen
+      ? false
+      : patch.bodyOpen ?? state.bodyOpen;
     if (
       mode === state.mode
       && viewPreset === state.viewPreset
@@ -570,6 +639,13 @@ export function createConfiguratorPresentationController(
 
   return {
     getState: () => state,
+    getBody: () => body,
+    describeBody: (next) => {
+      body = next;
+      // Adopting a body that cannot open has to shut the panels, or the state
+      // keeps claiming an opening no one can see.
+      if (!next.canOpen && state.bodyOpen) update({ bodyOpen: false });
+    },
     present: (patch, options) => {
       throwIfAborted(options?.signal);
       return update(patch);
@@ -594,7 +670,7 @@ export function createConfiguratorToolDefinitions(
     name: CONFIGURATOR_TOOL_NAMES[0],
     title: "Get current vehicle configuration",
     description:
-      "Read the current vehicle build, buyer context, price, range, delivery status, revision, transaction status, and presentation state. Call this before making a change so expectedRevision is current.",
+      "Read the current vehicle build, buyer context, price, range, delivery status, revision, transaction status, presentation state, and which vehicle body is on screen. Check renderedBody before describing what the person is looking at: representsConfiguredVehicle is false when the viewport is showing a licensed stand-in of a different car rather than the vehicle being configured. Call this before making a change so expectedRevision is current.",
     inputSchema: EMPTY_SCHEMA,
     annotations: { readOnlyHint: true, untrustedContentHint: false },
     execute: (input, options) => {
@@ -607,6 +683,7 @@ export function createConfiguratorToolDefinitions(
         ...compactConfiguration(state),
         transaction: transactionState(state),
         presentation: presentation.getState(),
+        renderedBody: presentation.getBody(),
       };
     },
   };
@@ -851,7 +928,7 @@ export function createConfiguratorToolDefinitions(
         bodyOpen: {
           type: "boolean",
           description:
-            "Swing the doors, frunk and liftgate open. Blueprint mode always shuts them.",
+            "Swing the doors, frunk and liftgate open. Refused, and reported back under `unapplied`, in blueprint mode or on a body with no openable panels — see renderedBody.canOpen from get_vehicle_configuration.",
         },
       },
       minProperties: 1,
@@ -900,7 +977,33 @@ export function createConfiguratorToolDefinitions(
         },
         { signal: options?.signal },
       );
-      return { ok: true, changed: next !== previous, presentation: next };
+      // Some requests are clamped rather than applied. Returning ok:true with a
+      // state that quietly disagrees with what was asked leaves an agent
+      // believing it opened a body that never moved, so say so.
+      const unapplied: { field: string; requested: unknown; reason: string }[] = [];
+      const body = presentation.getBody();
+      if (record.bodyOpen !== undefined && next.bodyOpen !== record.bodyOpen) {
+        unapplied.push({
+          field: "bodyOpen",
+          requested: record.bodyOpen,
+          reason: !body.canOpen
+            ? `The body on screen (${body.label}) has no openable doors, frunk or liftgate.`
+            : "Blueprint mode always shuts the body. Switch to showroom mode first.",
+        });
+      }
+      if (record.viewPreset !== undefined && next.viewPreset !== record.viewPreset) {
+        unapplied.push({
+          field: "viewPreset",
+          requested: record.viewPreset,
+          reason: "Blueprint mode only draws the profile and wheel views.",
+        });
+      }
+      return {
+        ok: true,
+        changed: next !== previous,
+        presentation: next,
+        ...(unapplied.length > 0 ? { unapplied } : {}),
+      };
     },
   };
 
@@ -1227,6 +1330,234 @@ export function createConfiguratorToolDefinitions(
     },
   };
 
+  const getVehicleTwinState: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[10],
+    title: "Get digital twin state",
+    description:
+      "Read the AutoLab Garage camera, active motions, selected component, available views, and the configuration revision synchronized from the configurator. Read-only and does not move the vehicle.",
+    inputSchema: EMPTY_SCHEMA,
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+    execute: async (input, options) => {
+      throwIfAborted(options?.signal);
+      const record = assertRecord(input, CONFIGURATOR_TOOL_NAMES[10]);
+      assertOnlyKeys(record, [], CONFIGURATOR_TOOL_NAMES[10]);
+      const state = store.getState();
+      const context = vehicleTwinContext(state);
+      await ownerGuideBridge.syncContext(context);
+      throwIfAborted(options?.signal);
+      const twin = await ownerGuideBridge.call<Record<string, unknown>>("get_state");
+      return { ok: true, revision: state.domain.revision, context, twin };
+    },
+  };
+
+  const listVehicleParts: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[11],
+    title: "List digital twin components",
+    description:
+      "List the R2 digital twin's named components. Filter by shell, chassis, running gear, or interior; request detail for measured world-space bounds in metres.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        category: { type: "string", enum: ["shell", "chassis", "running", "interior"] },
+        detail: { type: "boolean" },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+    execute: async (input, options) => {
+      throwIfAborted(options?.signal);
+      const toolName = CONFIGURATOR_TOOL_NAMES[11];
+      const record = assertRecord(input, toolName);
+      assertOnlyKeys(record, ["category", "detail"], toolName);
+      if (
+        record.category !== undefined
+        && !["shell", "chassis", "running", "interior"].includes(String(record.category))
+      ) throw new TypeError(`${toolName} received an unsupported category.`);
+      if (record.detail !== undefined && typeof record.detail !== "boolean") {
+        throw new TypeError(`${toolName} expects detail to be a boolean.`);
+      }
+      const state = store.getState();
+      await ownerGuideBridge.syncContext(vehicleTwinContext(state));
+      throwIfAborted(options?.signal);
+      const result = await ownerGuideBridge.call<Record<string, unknown>>("list_parts", {
+        ...(record.category === undefined ? {} : { category: record.category }),
+        detail: record.detail ?? false,
+      });
+      return { ok: true, revision: state.domain.revision, ...result };
+    },
+  };
+
+  const inspectVehiclePart: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[12],
+    title: "Inspect a vehicle component",
+    description:
+      "Open AutoLab Garage, find one named component, reveal it through the body when necessary, frame it with the camera, and highlight it with an authored technical leader.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        part: { type: "string", minLength: 1, maxLength: 80 },
+        revealUnderBody: { type: "boolean", description: "Dissolve the shell for chassis and interior components. Defaults to true." },
+        azimuthDeg: { type: "number" },
+        elevationDeg: { type: "number", minimum: 2, maximum: 86 },
+        margin: { type: "number", minimum: 0.1, maximum: 3 },
+      },
+      required: ["part"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, untrustedContentHint: false },
+    execute: async (input, options) => {
+      throwIfAborted(options?.signal);
+      const toolName = CONFIGURATOR_TOOL_NAMES[12];
+      const record = assertRecord(input, toolName);
+      assertOnlyKeys(record, ["part", "revealUnderBody", "azimuthDeg", "elevationDeg", "margin"], toolName);
+      if (typeof record.part !== "string" || record.part.length < 1 || record.part.length > 80) {
+        throw new TypeError(`${toolName} requires a component name.`);
+      }
+      if (record.revealUnderBody !== undefined && typeof record.revealUnderBody !== "boolean") {
+        throw new TypeError(`${toolName} expects revealUnderBody to be a boolean.`);
+      }
+      for (const key of ["azimuthDeg", "elevationDeg", "margin"] as const) {
+        if (record[key] !== undefined && typeof record[key] !== "number") {
+          throw new TypeError(`${toolName} expects ${key} to be a number.`);
+        }
+      }
+
+      const state = store.getState();
+      ownerGuideBridge.setWorkspace("garage");
+      await ownerGuideBridge.syncContext(vehicleTwinContext(state));
+      const part = await ownerGuideBridge.call<{ id: string; label: string; category: string }>(
+        "get_part",
+        { part: record.part },
+      );
+      if (part.category !== "shell" && record.revealUnderBody !== false) {
+        await ownerGuideBridge.call("set_motion", { motion: "panels", on: true });
+      }
+      throwIfAborted(options?.signal);
+      const frame = await ownerGuideBridge.call<Record<string, unknown>>("frame_part", {
+        part: record.part,
+        ...(record.azimuthDeg === undefined ? {} : { azimuth_deg: record.azimuthDeg }),
+        ...(record.elevationDeg === undefined ? {} : { elevation_deg: record.elevationDeg }),
+        ...(record.margin === undefined ? {} : { margin: record.margin }),
+      });
+      await ownerGuideBridge.call("highlight_part", { part: record.part });
+      return {
+        ok: true,
+        revision: state.domain.revision,
+        workspace: "garage",
+        part,
+        frame,
+      };
+    },
+  };
+
+  const setVehicleTwinView: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[13],
+    title: "Set digital twin view",
+    description:
+      "Open AutoLab Garage and move the synchronized vehicle to an authored ISO, three-quarter, side, front, or top view. Side, front, and top are true orthographic elevations.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        view: { type: "string", enum: ["iso", "q34f", "q34r", "side", "front", "top"] },
+        annotationsVisible: { type: "boolean" },
+      },
+      required: ["view"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, untrustedContentHint: false },
+    execute: async (input, options) => {
+      throwIfAborted(options?.signal);
+      const toolName = CONFIGURATOR_TOOL_NAMES[13];
+      const record = assertRecord(input, toolName);
+      assertOnlyKeys(record, ["view", "annotationsVisible"], toolName);
+      if (!["iso", "q34f", "q34r", "side", "front", "top"].includes(String(record.view))) {
+        throw new TypeError(`${toolName} requires a supported view.`);
+      }
+      if (record.annotationsVisible !== undefined && typeof record.annotationsVisible !== "boolean") {
+        throw new TypeError(`${toolName} expects annotationsVisible to be a boolean.`);
+      }
+      const state = store.getState();
+      ownerGuideBridge.setWorkspace("garage");
+      await ownerGuideBridge.syncContext(vehicleTwinContext(state));
+      const view = await ownerGuideBridge.call<Record<string, unknown>>("set_view", { view: record.view });
+      if (record.annotationsVisible !== undefined) {
+        await ownerGuideBridge.call("set_annotations", { visible: record.annotationsVisible });
+      }
+      return { ok: true, revision: state.domain.revision, workspace: "garage", view };
+    },
+  };
+
+  const setVehicleTwinMotion: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[14],
+    title: "Set digital twin motion",
+    description:
+      "Open AutoLab Garage and turn a vehicle demonstration on or off: run, drive, lights, shell dissolve, exploded assembly, or every openable panel.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        motion: { type: "string", enum: ["run", "drive", "lights", "panels", "explode", "open"] },
+        on: { type: "boolean" },
+      },
+      required: ["motion"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, untrustedContentHint: false },
+    execute: async (input, options) => {
+      throwIfAborted(options?.signal);
+      const toolName = CONFIGURATOR_TOOL_NAMES[14];
+      const record = assertRecord(input, toolName);
+      assertOnlyKeys(record, ["motion", "on"], toolName);
+      if (!["run", "drive", "lights", "panels", "explode", "open"].includes(String(record.motion))) {
+        throw new TypeError(`${toolName} requires a supported motion.`);
+      }
+      if (record.on !== undefined && typeof record.on !== "boolean") {
+        throw new TypeError(`${toolName} expects on to be a boolean.`);
+      }
+      const state = store.getState();
+      ownerGuideBridge.setWorkspace("garage");
+      await ownerGuideBridge.syncContext(vehicleTwinContext(state));
+      const result = await ownerGuideBridge.call<Record<string, unknown>>("set_motion", {
+        motion: record.motion,
+        ...(record.on === undefined ? {} : { on: record.on }),
+      });
+      return { ok: true, revision: state.domain.revision, workspace: "garage", ...result };
+    },
+  };
+
+  const measureVehicleParts: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[15],
+    title: "Measure between vehicle components",
+    description:
+      "Measure the centre-to-centre distance and per-axis separation between two named digital-twin components in metres. Read-only and does not move the vehicle.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from: { type: "string", minLength: 1, maxLength: 80 },
+        to: { type: "string", minLength: 1, maxLength: 80 },
+      },
+      required: ["from", "to"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+    execute: async (input, options) => {
+      throwIfAborted(options?.signal);
+      const toolName = CONFIGURATOR_TOOL_NAMES[15];
+      const record = assertRecord(input, toolName);
+      assertOnlyKeys(record, ["from", "to"], toolName);
+      if (typeof record.from !== "string" || typeof record.to !== "string") {
+        throw new TypeError(`${toolName} requires two component names.`);
+      }
+      const state = store.getState();
+      await ownerGuideBridge.syncContext(vehicleTwinContext(state));
+      throwIfAborted(options?.signal);
+      const result = await ownerGuideBridge.call<Record<string, unknown>>("measure", {
+        from: record.from,
+        to: record.to,
+      });
+      return { ok: true, revision: state.domain.revision, ...result };
+    },
+  };
+
 
   return [
     getConfiguration,
@@ -1239,6 +1570,12 @@ export function createConfiguratorToolDefinitions(
     setBuyerContext,
     estimateOwnershipCost,
     compareConfigurations,
+    getVehicleTwinState,
+    listVehicleParts,
+    inspectVehiclePart,
+    setVehicleTwinView,
+    setVehicleTwinMotion,
+    measureVehicleParts,
   ];
 }
 

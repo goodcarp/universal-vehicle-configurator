@@ -1,47 +1,52 @@
-# Hackathon build checklist
+# AutoLab hackathon build checklist
 
-Updated: 2026-09-01
+Updated: 2026-09-03
 
-## Implemented in source
+## Combined experience
 
-- [x] One licensed GLB is the sole visible vehicle identity; alternate
-  procedural geometry is excluded from loading and error paths.
-- [x] Licensed OpenX Assets GLB shipped as the primary hero; exact
-  source, attribution, license expression, and checksum recorded.
-- [x] Audited GLB integrated under public assets and verified in the live
-  showroom.
-- [x] Live Angle, Profile, and Wheel showroom views.
-- [x] Pointer/touch orbit and dolly plus keyboard orbit/reset.
-- [x] Smooth camera presets, reduced-motion behavior, and paint, wheel,
-  charge-port, and utility focus targets.
-- [x] Live paint material, mapped wheel rim/inset treatment, and conditional
-  tow-hitch geometry driven by configurator state.
-- [x] Same-GLB Blueprint presentation with technical materials and derived
-  edges; Interior keeps the same exterior visible with an honest material-only
-  overlay.
-- [x] Automatic same-GLB capture fallback for unsupported WebGL, render failure,
-  and context loss.
-- [x] Human controls and Site Tools connected to the same configuration and
-  presentation state.
+- [x] Unify the sales configurator and R2 owner drawing under **AutoLab by
+  AutoMoto**, with one Configure/Garage lifecycle switch.
+- [x] Make the code-native R2 the default body in every configurator view.
+- [x] Carry build, paint, wheels, interior, range, price, and revision into the
+  Garage digital twin.
+- [x] Load Garage after showroom first paint, then keep it warm for instant
+  agent choreography.
+- [x] Bundle Garage's Three.js runtime locally; no rendering dependency on a
+  CDN or remote font.
+- [x] Keep direct human controls available on both surfaces.
+
+## Agent surface
+
+- [x] Expose 16 curated AutoLab WebMCP tools for configuration, buyer context,
+  ownership math, comparisons, presentations, parts, motion, and measurement.
+- [x] Expose the 14 lower-level drawing tools when Garage is opened directly.
+- [x] Let an agent switch lifecycle surfaces, dissolve the body, frame and
+  highlight a component, open the vehicle, or explode the assembly.
+- [x] Preserve revision-safe configuration transactions, interruption, undo,
+  and shareable URL state.
+- [x] Keep claim provenance and incentive sources in tool responses.
+
+## Verification
+
+- [x] TypeScript passes.
+- [x] ESLint passes; the embedded Garage runtime is treated as a self-contained
+  browser artifact and excluded from the host TypeScript lint target.
+- [x] Full suite passes: 108 tests.
+- [x] Focused integration suite passes: 26 tests.
+- [x] Production build completes.
+- [x] Browser-confirm 16 host tools and 14 direct Garage tools.
+- [x] Browser-confirm the configured Performance R2 context reaches Garage and
+  the agent can reveal/frame the structural battery.
+- [ ] Confirm touch orbit, reduced motion, and WebGL fallback on the deployed
+  URL.
+- [ ] Record the final demo and capture submission screenshots.
 
 ## Rights and representation
 
-- [x] Both primary candidate and fallback are identified as representative
-  compact-EV visuals, not a manufacturer-exact R2.
-- [x] The only bundled third-party vehicle model is the audited OpenX Assets GLB
-  recorded in the provenance document.
-- [x] Ship the OpenX/artist attribution, MPL-2.0 and CC-BY-4.0 notices,
-  source-form link, modification statement, and unofficial/unaffiliated caveat
-  with the integrated GLB.
-- [x] Rejected external candidates and their licenses are recorded in
-  [`docs/asset-license.md`](../asset-license.md).
-- [x] Same-model safety-frame provenance and integrity hashes are recorded.
-
-## Final demo verification
-
-- [x] Complete final desktop and mobile visual QA after the shared live-3D
-  integration settles.
-- [ ] Confirm touch orbit, reduced motion, and WebGL-failure fallback on the
-  deployed build.
-- [ ] Capture the final demo using only claims supported by the implementation
-  above.
+- [x] Default hero and Garage vehicle are the same independent procedural R2
+  reconstruction fitted to published dimensions—not manufacturer CAD or a
+  scan.
+- [x] AutoLab is labeled independent, unofficial, and unaffiliated.
+- [x] The optional licensed EX30 reference remains documented and attributed,
+  but is not the default demo identity.
+- [x] Bundled Three.js runtime retains its upstream MIT license header.

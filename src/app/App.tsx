@@ -1,5 +1,5 @@
-import { Copy, Share2, Sparkles, Undo2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Copy, Orbit, Share2, Sparkles, Undo2, Wrench, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { VehicleConfigurator } from "../features/configurator";
 import {
   VehicleCanvas,
@@ -8,8 +8,12 @@ import {
   type VehicleHotspotId,
   type VehicleViewPreset,
 } from "../features/vehicle-canvas";
-import { SCENE_MANIFEST } from "../scene/scene-manifest";
-import { activeVehicleModelSource } from "../scene/vehicle-model-source";
+import { activeVehicleModelSource, anchorsFor } from "../scene/vehicle-model-source";
+import { OwnerGuide } from "../owner-guide/OwnerGuide";
+import {
+  ownerGuideBridge,
+  type AutoLabWorkspace,
+} from "../owner-guide/owner-guide-bridge";
 import { AgentActivity } from "./AgentActivity";
 import { IncentiveSummary } from "./IncentiveSummary";
 import { ToolStatus } from "./ToolStatus";
@@ -70,6 +74,22 @@ export function App() {
   const [dismissedReceiptId, setDismissedReceiptId] = useState<string | null>(null);
   const [siteTools, setSiteTools] = useState<ConfiguratorSiteToolsStatus>(INITIAL_TOOL_STATUS);
   const [presentation, setPresentation] = useState(() => configuratorPresentation.getState());
+  const [workspace, setWorkspace] = useState<AutoLabWorkspace>(() => ownerGuideBridge.getWorkspace());
+
+  // Tell the agent surface what the viewport actually mounted. The webmcp layer
+  // deliberately knows nothing about the renderer, so the page reports it.
+  useEffect(() => {
+    const body = activeVehicleModelSource();
+    configuratorPresentation.describeBody({
+      id: body.id,
+      label: body.sceneTitle,
+      representsConfiguredVehicle: body.id !== "licensed-glb",
+      basis: body.credit.text.replace(/^Model:\s*/u, ""),
+      canOpen: body.hasOpenableBody,
+    });
+  }, []);
+
+  useEffect(() => ownerGuideBridge.observeWorkspace(setWorkspace), []);
   const [changeNotice, setChangeNotice] = useState<ChangeNotice | null>(null);
   const [shareStatus, setShareStatus] = useState<"idle" | "copied">("idle");
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -183,36 +203,59 @@ export function App() {
     return nextPresentation;
   }, []);
 
+  const bodySource = activeVehicleModelSource();
+  const anchors = anchorsFor(bodySource);
   const hotspots: VehicleHotspot[] = [
     {
       id: "paint",
       label: "Exterior finish",
-      detail: `${paintOption?.label ?? "Representative finish"} · selection rendered on ${activeVehicleModelSource().hotspotBasis}`,
-      anchor: SCENE_MANIFEST.anchors.bodyPaint,
+      detail: `${paintOption?.label ?? "Representative finish"} · selection rendered on ${bodySource.hotspotBasis}`,
+      anchor: anchors.bodyPaint,
       accuracy: "representative",
     },
     {
       id: "charge-port",
       label: "Charging setup",
       detail: "Home-charging setup is tracked outside vehicle MSRP.",
-      anchor: SCENE_MANIFEST.anchors.chargePort,
+      anchor: anchors.chargePort,
       accuracy: "representative",
     },
     {
       id: "wheels",
       label: "Wheel package",
       detail: `${wheelOption?.label ?? "Representative wheel"} · ${wheel.diameterInches} in`,
-      anchor: SCENE_MANIFEST.anchors.frontWheel,
+      anchor: anchors.frontWheel,
       accuracy: "representative",
     },
     {
       id: "utility",
       label: "Rear utility",
       detail: towingOption?.label ?? "No tow package selected",
-      anchor: SCENE_MANIFEST.anchors.rearHitch,
+      anchor: anchors.rearHitch,
       accuracy: "representative",
     },
   ];
+
+  const twinContext = useMemo(() => ({
+    build: buildOption?.label ?? "Rivian R2",
+    paint: paintOption?.label ?? paint.label,
+    wheels: wheelOption?.label ?? wheel.label,
+    interior: interiorOption?.label ?? interior.label,
+    rangeMiles: typeof resolved.specs.range_mi === "number" ? resolved.specs.range_mi : null,
+    vehicleTotal: resolved.price.vehicleTotal,
+    revision,
+  }), [
+    buildOption?.label,
+    interior.label,
+    interiorOption?.label,
+    paint.label,
+    paintOption?.label,
+    resolved.price.vehicleTotal,
+    resolved.specs.range_mi,
+    revision,
+    wheel.label,
+    wheelOption?.label,
+  ]);
 
   const handleShare = async () => {
     const url = applyShareStateToHistory(catalog, configuratorStore.getState().domain, {
@@ -241,17 +284,38 @@ export function App() {
   };
 
   return (
-    <main className="configurator-shell">
+    <main className="configurator-shell" data-workspace={workspace}>
       <header className="configurator-header">
-        <a className="configurator-header__brand" href="/" aria-label="Universal home">
-          <span className="configurator-header__mark" aria-hidden="true">U</span>
-          <span>Universal</span>
+        <a className="configurator-header__brand" href="/" aria-label="AutoLab home">
+          <span className="configurator-header__mark" aria-hidden="true">A</span>
+          <span className="configurator-header__wordmark">
+            <strong>AutoLab</strong>
+            <small>by AutoMoto</small>
+          </span>
         </a>
 
-        <div className="configurator-header__model">
-          <span>R2 / Build</span>
-          <strong>{shortBuildLabel(buildOption)}</strong>
-          <span>Rev {revision}</span>
+        <div className="configurator-header__center">
+          <nav className="lifecycle-switch" aria-label="Vehicle lifecycle">
+            <button
+              type="button"
+              aria-pressed={workspace === "configure"}
+              onClick={() => ownerGuideBridge.setWorkspace("configure")}
+            >
+              <Orbit aria-hidden="true" /> Configure
+            </button>
+            <button
+              type="button"
+              aria-pressed={workspace === "garage"}
+              onClick={() => ownerGuideBridge.setWorkspace("garage")}
+            >
+              <Wrench aria-hidden="true" /> Garage
+            </button>
+          </nav>
+          <div className="configurator-header__model">
+            <span>R2 / {workspace === "configure" ? "Build" : "Digital twin"}</span>
+            <strong>{shortBuildLabel(buildOption)}</strong>
+            <span>Rev {revision}</span>
+          </div>
         </div>
 
         <div className="configurator-header__actions">
@@ -276,7 +340,13 @@ export function App() {
         </div>
       </header>
 
-      <section className="configurator-workspace" aria-label="Vehicle configuration workspace">
+      <div className="autolab-surfaces">
+        <section
+          className="configurator-workspace"
+          data-active={workspace === "configure" || undefined}
+          aria-label="Vehicle configuration workspace"
+          aria-hidden={workspace !== "configure"}
+        >
         <div
           className="configurator-viewport"
           data-has-focus-card={activeHotspot || undefined}
@@ -399,7 +469,10 @@ export function App() {
             />
           </div>
         </aside>
-      </section>
+        </section>
+
+        <OwnerGuide active={workspace === "garage"} context={twinContext} />
+      </div>
 
       {reviewOpen && (
         <div className="review-layer">

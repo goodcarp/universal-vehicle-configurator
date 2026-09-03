@@ -11,10 +11,16 @@ export type WheelPresentation =
 export type SceneAssetMode = "live_3d" | "authored_2_5d";
 
 /**
- * Asset-specific rendering facts for the R2-first experience. The primary live
- * geometry is a licensed Volvo EX30 reference asset and is explicitly not
- * represented as R2 geometry. Every visible presentation and safety frame uses
- * this same source geometry so identity remains continuous across mode changes.
+ * Facts about the licensed reference asset.
+ *
+ * This described the whole experience when the licensed Volvo EX30 was the only
+ * body. It is not any more: the live vehicle is a code-native R2, registered in
+ * vehicle-model-source.ts, which carries its own title, attribution, credit and
+ * hotspot anchors. What remains here is the licensed asset itself — still the
+ * source of the authored stills shown while the live body loads, still the
+ * fallback when WebGL is unavailable, and still selectable with
+ * ?model=licensed-glb. Nothing in here should be read as describing what is on
+ * screen by default.
  */
 export const SCENE_MANIFEST = {
   id: "openx-volvo-ex30-2024-reference",
@@ -24,7 +30,7 @@ export const SCENE_MANIFEST = {
   aspectRatio: 16 / 9,
   model: {
     src: "/models/openx-volvo-ex30-2024.glb",
-    status: "licensed_primary_with_same_model_capture_fallback",
+    status: "licensed_fallback_and_authored_still_source",
     assetName: "2024 Volvo EX30 low-poly",
     representsConfiguredVehicle: false,
     license: "MPL-2.0 AND CC-BY-4.0",
@@ -54,6 +60,8 @@ export const SCENE_MANIFEST = {
   wheelPresentation: "material_only" as WheelPresentation,
   labels: {
     visualAccuracy: "Licensed reference geometry — not R2 geometry",
+    // Shown while the live R2 is loading, and if it cannot run at all.
+    fallbackNotice: "Authored still of the licensed reference vehicle",
     wheelAccuracy: "Representative wheel treatment",
     affiliation: "Licensed EX30 reference · not an R2",
   },

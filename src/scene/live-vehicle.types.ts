@@ -9,6 +9,8 @@ export type LiveVehiclePaint = Readonly<{
 }>;
 
 export type LiveVehicleWheel = Readonly<{
+  /** Catalog option id, so a body can render the exact finish being sold. */
+  id?: string;
   diameterInches: number;
   style: "aero" | "terrain" | "sport";
 }>;

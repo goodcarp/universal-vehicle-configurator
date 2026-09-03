@@ -175,7 +175,7 @@ describe("VehicleCanvas", () => {
   it("supports keyboard pan, blueprint toggle, and reset", () => {
     const onViewportChange = vi.fn();
     render(<VehicleCanvas defaultViewPreset="profile" onViewportChange={onViewportChange} />);
-    const viewport = screen.getByRole("application", { name: /Licensed compact-SUV reference model/i });
+    const viewport = screen.getByRole("application", { name: /Licensed compact-SUV reference/i });
 
     fireEvent.keyDown(viewport, { key: "ArrowRight" });
     expect(onViewportChange).toHaveBeenLastCalledWith(expect.objectContaining({ panX: 1.5 }));
@@ -191,7 +191,7 @@ describe("VehicleCanvas", () => {
   it("pans from touch-style pointer input without stealing control clicks", () => {
     const onViewportChange = vi.fn();
     render(<VehicleCanvas defaultViewPreset="profile" onViewportChange={onViewportChange} />);
-    const viewport = screen.getByRole("application", { name: /Licensed compact-SUV reference model/i });
+    const viewport = screen.getByRole("application", { name: /Licensed compact-SUV reference/i });
     Object.defineProperty(viewport, "getBoundingClientRect", {
       configurable: true,
       value: () => ({

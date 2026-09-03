@@ -29,6 +29,7 @@ import { SCENE_MANIFEST, type NormalizedAnchor } from "../../scene/scene-manifes
 import {
   DEFAULT_VEHICLE_MODEL_SOURCE,
   resolveVehicleModelSource,
+  anchorsFor,
   REQUESTED_VEHICLE_MODEL_SOURCE,
   type VehicleModelSourceId,
 } from "../../scene/vehicle-model-source";
@@ -321,12 +322,6 @@ export function VehicleCanvas({
     return REQUESTED_VEHICLE_MODEL_SOURCE ?? DEFAULT_VEHICLE_MODEL_SOURCE;
   }, [modelSource]);
 
-  // Only offer the control when the body on screen can actually open, so the
-  // affordance never promises something the model cannot do.
-  const canOpenBody = resolveVehicleModelSource(activeModelSource).hasOpenableBody
-    && currentMode === "showroom";
-  const bodyIsOpen = canOpenBody && bodyOpen;
-
   const liveViewRequested = true;
   const liveRendererPending = liveViewRequested
     && webglSupport === "supported"
@@ -336,6 +331,14 @@ export function VehicleCanvas({
     && liveStatus === "ready";
   const activeAsset = liveRendererActive ? "ready" : authoredAsset;
 
+  // Only offer the control when the body on screen can actually open, and when
+  // a live renderer is there to open it — over an authored still it would be a
+  // control that visibly does nothing.
+  const canOpenBody = resolveVehicleModelSource(activeModelSource).hasOpenableBody
+    && currentMode === "showroom"
+    && liveRendererActive;
+  const bodyIsOpen = canOpenBody && bodyOpen;
+
   // The HUD must describe whatever is actually on screen, not a fixed asset.
   const modelAttribution = liveRendererActive
     ? resolveVehicleModelSource(activeModelSource).attribution
@@ -344,7 +347,9 @@ export function VehicleCanvas({
   // it is the licensed reference on screen; once the live body takes over it is
   // not, and calling it one would be the exact provenance claim this
   // configurator exists to get right.
-  const modelCredit = resolveVehicleModelSource(activeModelSource).credit;
+  const activeBody = resolveVehicleModelSource(activeModelSource);
+  const modelCredit = activeBody.credit;
+  const bodyAnchors = anchorsFor(activeBody);
   const modelTitle = liveRendererActive
     ? resolveVehicleModelSource(activeModelSource).sceneTitle
     : "Licensed compact-SUV reference";
@@ -354,32 +359,33 @@ export function VehicleCanvas({
       id: "paint",
       label: "Exterior finish",
       detail: paint.label,
-      anchor: SCENE_MANIFEST.anchors.bodyPaint,
+      anchor: bodyAnchors.bodyPaint,
       accuracy: paint.accuracy ?? "representative",
     },
     {
       id: "charge-port",
       label: "Charge port",
       detail: `Representative feature location on ${resolveVehicleModelSource(activeModelSource).hotspotBasis}`,
-      anchor: SCENE_MANIFEST.anchors.chargePort,
+      anchor: bodyAnchors.chargePort,
       accuracy: "representative",
     },
     {
       id: "wheels",
       label: "Wheel package",
       detail: `${wheel.label} · ${wheel.diameterInches} in`,
-      anchor: SCENE_MANIFEST.anchors.frontWheel,
+      anchor: bodyAnchors.frontWheel,
       accuracy: wheel.accuracy ?? "representative",
     },
     {
       id: "utility",
       label: "Rear utility",
       detail: "Context hotspot · capability not asserted",
-      anchor: SCENE_MANIFEST.anchors.rearHitch,
+      anchor: bodyAnchors.rearHitch,
       accuracy: "representative",
     },
   ], [
     activeModelSource,
+    bodyAnchors,
     hotspots,
     paint.accuracy,
     paint.label,
@@ -563,7 +569,7 @@ export function VehicleCanvas({
         className="vc-stage"
         role="application"
         aria-roledescription="interactive vehicle viewport"
-        aria-label={`${SCENE_MANIFEST.displayName}. ${paint.label}. ${wheel.label}. ${interior.label}.`}
+        aria-label={`${modelTitle}. ${paint.label}. ${wheel.label}. ${interior.label}.`}
         aria-describedby="vehicle-canvas-instructions"
         tabIndex={0}
         data-dragging={dragging || undefined}
@@ -595,6 +601,7 @@ export function VehicleCanvas({
                 <LiveVehicleViewport
                   paint={{ color: paint.color }}
                   wheel={{
+                    id: wheel.id,
                     diameterInches: wheel.diameterInches,
                     style: wheel.style ?? "aero",
                   }}
@@ -664,11 +671,11 @@ export function VehicleCanvas({
           )}
           {liveRendererActive && <>Live 3D · representative vehicle</>}
           {liveViewRequested && (webglSupport === "unsupported" || liveStatus === "failed") && (
-            <>Same-model fallback · controls still active</>
+            <>Authored still of the licensed reference · controls still active</>
           )}
           {!liveViewRequested && activeAsset === "loading" && <><LoaderCircle aria-hidden="true" /> Loading authored view</>}
           {!liveViewRequested && activeAsset === "ready" && <>{accuracyLabel(accuracy)}</>}
-          {!liveViewRequested && activeAsset === "fallback" && <>Fallback view · controls still active</>}
+          {!liveViewRequested && activeAsset === "fallback" && <>Authored still of the licensed reference · controls still active</>}
         </div>
 
         {liveRendererActive && (

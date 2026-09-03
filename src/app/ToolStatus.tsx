@@ -13,6 +13,12 @@ const TOOL_SUMMARIES: Record<string, string> = {
   set_vehicle_buyer_context: "Record buyer facts so incentives stop guessing",
   estimate_vehicle_ownership_cost: "Payment, energy, and multi-year ownership math",
   compare_vehicle_configurations: "Compare up to three alternatives side by side",
+  get_vehicle_twin_state: "Read the synchronized Garage camera and vehicle state",
+  list_vehicle_parts: "List 42 addressable vehicle components and measured bounds",
+  inspect_vehicle_part: "Reveal, frame, and highlight one component in the digital twin",
+  set_vehicle_twin_view: "Move the Garage to an authored or orthographic view",
+  set_vehicle_twin_motion: "Run lights, openings, shell dissolve, drive, or exploded view",
+  measure_vehicle_parts: "Measure between named vehicle components in metres",
 };
 
 const STARTER_PROMPTS = [
@@ -20,6 +26,8 @@ const STARTER_PROMPTS = [
   "I'm in Colorado, I'll finance, and I can install a home charger. What do I actually qualify for?",
   "Switch to the all-terrain wheels and show me the wheel close-up.",
   "How does Premium compare to what I have, and what would each cost me monthly?",
+  "Take me into the Garage, reveal the structural battery, and explain what I am looking at.",
+  "Open every panel on my configured R2, then show me where the charge port is.",
 ];
 
 function statusLabel(status: ConfiguratorSiteToolsStatus) {
@@ -109,9 +117,9 @@ export function ToolStatus({ status }: { status: ConfiguratorSiteToolsStatus }) 
           ) : (
             <>
               <p className="tool-status__lede">
-                This is a WebMCP entry: the page publishes ten tools an agent can
-                call. Your browser has not exposed the API, so the configurator is
-                running as a normal manual configurator.
+                This is a WebMCP entry: AutoLab publishes configurator and digital-twin
+                tools an agent can call. Your browser has not exposed the API, so both
+                lifecycle surfaces are running in manual mode.
               </p>
               <ul className="tool-status__how">
                 <li>
@@ -127,8 +135,9 @@ export function ToolStatus({ status }: { status: ConfiguratorSiteToolsStatus }) 
                 </li>
               </ul>
               <p className="tool-status__lede">
-                The page keeps watching, so it will switch over on its own if the API
-                appears.
+                AutoLab keeps watching, so it will switch over on its own if the API
+                appears. In a compatible browser it exposes both configurator and
+                digital-twin tools.
               </p>
             </>
           )}

@@ -1,14 +1,19 @@
-# Universal Vehicle Configurator
+# AutoLab by AutoMoto
 
-An unofficial WebMCP Challenge concept: a buyer-side R2-inspired vehicle
-configurator where a person and an agent write to one revisioned state, and the
-person always outranks the agent.
+An unofficial WebMCP Challenge concept: one agent-operable vehicle experience
+that follows the product from configuration through ownership. A person and an
+agent share the same revisioned build, the same code-native R2 model, and two
+purpose-built lifecycle surfaces.
 
-The same revisioned configuration state drives the human UI, shareable URL,
-live 3D showroom, pricing/range/delivery consequences, buyer context, a sourced
-incentive engine, and ten page-defined WebMCP tools. Agents can inspect,
-simulate, apply, interrupt, undo, price, compare, and present changes while the
-person remains in control of the configurator.
+**Configure** is a live 3D sales and buyer-intelligence experience. **Garage**
+is an interactive technical digital twin for owner guidance, component
+inspection, measurements, openings, exploded views, and service context. The
+same configuration state is synchronized between them.
+
+AutoLab exposes 16 page-defined WebMCP tools. Agents can inspect, simulate,
+apply, interrupt, undo, price, compare, present, list parts, frame components,
+operate the digital twin, and measure the vehicle while the person remains in
+control.
 
 Every claim an agent can make is citable: incentive outcomes carry resolved
 source records with titles, URLs and retrieval dates, and `get_vehicle_configuration`
@@ -19,7 +24,7 @@ returns a shareable permalink for the build it just described.
 The page publishes its tools on `document.modelContext`, falling back to
 `navigator.modelContext`. If the API appears after page load, the page picks it
 up on its own and the header chip switches from **Manual mode** to
-**10 agent tools** without a reload.
+**16 agent tools** without a reload.
 
 **Option A, ChatGPT desktop.** Update to the latest version, then open this
 URL in the app's built-in browser. Ask it to read the current build.
@@ -30,12 +35,14 @@ URL in the app's built-in browser. Ask it to read the current build.
 chrome://flags/#enable-webmcp-testing
 ```
 
-Either way, click the header chip to see every registered tool and three
+Either way, click the header chip to see every registered tool and several
 copyable starter prompts. Good ones to try:
 
 - `Configure the cheapest R2 that can tow, then tell me what changed.`
 - `I'm in Colorado, I'll finance, and I can install a home charger. What do I actually qualify for?`
 - `Switch to the all-terrain wheels and show me the wheel close-up.`
+- `Take me into the Garage, reveal the structural battery, and explain what I am looking at.`
+- `Open every panel on my configured R2, then show me where the charge port is.`
 
 While a multi-stage agent transaction is running, **click any control in the
 right-hand rail**. The agent is interrupted after its last committed stage, and
@@ -59,7 +66,7 @@ pnpm test:run
 pnpm build
 ```
 
-## The ten tools
+## The 16 tools
 
 - read the current build, price, incentives, and revision;
 - list valid options;
@@ -71,6 +78,12 @@ pnpm build
 - capture buyer context without guessing;
 - estimate financed payment, energy, and multi-year ownership cost;
 - compare the current build against up to three alternatives.
+- read the synchronized digital-twin state;
+- list 42 named shell, chassis, running-gear, and interior components;
+- reveal, frame, and highlight a component;
+- move among six authored technical views;
+- operate lights, driving motion, shell dissolve, openings, and exploded assembly;
+- measure between named vehicle components in metres.
 
 Every mutating tool takes an `expectedRevision` and rejects on conflict, so an
 agent cannot silently overwrite a change the person just made.
@@ -85,14 +98,14 @@ Review sheet recalculates with dated sources for each program.
 
 ## Rendering
 
-Angle, Profile, and Wheel use a licensed compact-crossover GLB with live paint
-and wheel treatment. Authored same-model captures cover the window before the
-GLB finishes loading and the unsupported-WebGL and context-loss paths; the
-licensed GLB is the only vehicle identity that ever appears. Blueprint and
-Interior are presentation treatments of that same geometry. See
-[`docs/asset-license.md`](docs/asset-license.md) for complete attribution,
-license notices, checksums, and representation limits.
+Both surfaces use the same procedural R2 geometry generated in code from
+published dimensions and independently fitted reference material. Configure
+dresses that body for a showroom; Garage renders the same authored geometry
+through a normal/depth/part-id post-processing pipeline with technical ink,
+hatching, dimensions, and part-aware interaction.
 
-This is an unofficial, unaffiliated concept, not associated with or endorsed by
-Rivian, Volvo, OpenX Assets, or the model's authors. The reference geometry is
-not a Rivian R2 and must not be presented as manufacturer-accurate.
+This is an independent, unofficial concept and is not associated with,
+endorsed by, or sponsored by Rivian or any manufacturer. The geometry is an
+independent reconstruction, not manufacturer CAD or an official engineering
+release. Vehicle names and specifications are used nominatively to identify
+the products being discussed.

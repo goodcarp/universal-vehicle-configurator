@@ -1,62 +1,59 @@
-# Hackathon build notes
+# AutoLab build notes
 
-Updated: 2026-09-01
+Updated: 2026-09-03
 
-## Hero rendering decision
+## Product decision
 
-The selected primary hero is the licensed OpenX Assets Volvo EX30 GLB: an
-unbadged, 59,354-triangle modern crossover with separate wheel and light nodes
-and configurable PBR materials. Its recorded license expression is MPL-2.0 AND
-CC-BY-4.0. The exact audited GLB is shipped under `public/models/` and has passed
-runtime and visual verification.
+AutoLab is now one lifecycle experience rather than two adjacent prototypes.
+**Configure** is the sales and buyer-intelligence surface. **Garage** is the
+owner and service surface. Both use the code-native R2 engineering body carried
+from the original drawing project, and both refer to one synchronized build
+revision.
 
-The licensed GLB is now the sole visible vehicle identity. The separate
-code-native procedural compact-EV concept is not mounted during loading or
-errors. The external mesh remains representative rather than a
-manufacturer-exact Rivian R2 and must be presented as an unofficial,
-unaffiliated visualization.
+The top-level agent API is intentionally curated: 16 tools describe useful
+customer outcomes instead of exposing every rendering primitive. The Garage
+page still publishes 14 lower-level tools when opened directly, which makes the
+framework legible to technical judges without making the shared experience
+noisy.
 
-Safety frames are captured directly from the same GLB. Blueprint restyles a
-clone of that live model with technical materials and derived edges. Interior
-keeps the same exterior GLB visible and adds a clearly labeled material preview
-because the source has no cabin geometry.
+## Implemented integration
 
-## Implemented live experience
+- AutoLab identity, favicon, metadata, README, Configure/Garage navigation, and
+  responsive shell.
+- The full R2 digital-twin webapp embedded under `public/garage/`.
+- A same-origin message bridge with origin/source/id validation and bounded
+  response timeouts.
+- State synchronization for build, paint, wheels, interior, range, total, and
+  revision.
+- Curated tools for twin state, component listing, part inspection, authored
+  views, motion, and component measurement.
+- Manual Garage shortcuts for the structural battery, vehicle openings, and
+  exploded assembly.
+- On-demand Garage loading: showroom 3D wins first paint, then the owner twin
+  prewarms in the background.
+- Local Three.js/add-on bundle, 1.35 DPR ceiling, 1024 px shadow map, 30 Hz
+  technical render cadence, and hidden-tab suspension.
 
-- Dynamically loaded WebGL showroom for Angle, Profile, and Wheel views.
-- Pointer/touch orbit and dolly, keyboard orbit/reset, smooth camera presets,
-  reduced-motion cuts, and targeted paint, wheel, charge-port, and utility
-  focus states.
-- Real-time body paint material changes.
-- Wheel selections that adjust mapped stock rim/inset materials and
-  representative rim scale without rewriting the source GLB.
-- Tow selection that adds or removes hitch geometry.
-- Studio lighting, environment reflections, ground/contact shadows, and a
-  bounded device-pixel ratio for a polished but performance-aware presentation.
-- Same-GLB captures hold the stage during GLB download and after unsupported,
-  failed, or lost WebGL contexts; the live layer cross-fades in on top.
-- DOM safety-frame layers are forced out of the healthy WebGL composite to
-  prevent doubled silhouettes and stale paint ghosting.
+## Verified choreography
 
-Human UI changes and the configurator Site Tools use the same central mutation
-and presentation state. An agent can therefore change the build and direct the
-camera or Blueprint presentation while the user sees the result in the same
-canvas.
+In the in-app browser, `get_vehicle_configuration` reported the code-native R2
+Performance build at revision 1. `get_vehicle_twin_state` returned the same
+build, Esker Silver, 21-inch wheels, Black Crater, 330-mile range, and $59,485
+vehicle total. `inspect_vehicle_part` then switched the shared page to Garage,
+dissolved the shell, framed the structural battery bounds, and highlighted the
+part. The host exposed all 16 AutoLab tools; the direct Garage page exposed all
+14 drawing tools.
 
-## Honest scope boundary
+## Honest boundary
 
-Blueprint is an explorable technical treatment of the same exterior geometry.
-Interior is deliberately limited to an exterior cabin-adjacent view and
-material preview; cabin geometry is not modeled. The primary model is an
-unbadged EX30-derived mesh and must not be described as a manufacturer-accurate
-R2 clone or as endorsed by Rivian, Volvo, the model artists, or OpenX Assets.
+The geometry is an independent procedural reconstruction fitted to Rivian's
+published dimensions and independently authored visual references. It is not
+Rivian CAD, a scan, or an official service model, and the site does not imply
+manufacturer endorsement. The optional licensed EX30 reference remains in the
+repository as an attributable alternate source but is not the default AutoLab
+vehicle identity.
 
-Final local production QA passed at desktop and 390 px / 430 px phone widths:
-the licensed model loaded, the page exposed all eight WebMCP tools, there was
-no horizontal overflow or runtime error, and the complete configuration flow
-remained readable. The only console notice is an upstream Three.js `Clock`
-deprecation warning. Hosting and recorded-demo verification remain separate
-submission tasks.
+## Remaining submission work
 
-The complete asset decision and rejected-candidate record is in
-[`docs/asset-license.md`](../asset-license.md).
+Deployment, deployed-device fallback checks, the recorded demo, and Devpost
+submission assets remain separate final-mile tasks.

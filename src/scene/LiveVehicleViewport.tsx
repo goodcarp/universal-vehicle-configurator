@@ -307,24 +307,31 @@ function VehicleScene(props: LiveVehicleViewportProps) {
       */}
       {hasCabin && props.viewPreset === "interior" && props.mode === "showroom" && (
         <group name="CabinFill">
-          <ambientLight intensity={0.62} color="#f3f1ea" />
+          {/*
+            Enough to model the room, not enough to lift the trim off its own
+            colour. These are close-range point lights inside a two-metre box,
+            so a little goes a long way: at anything like exterior levels a
+            near-black upholstery renders as pale khaki, and the colour someone
+            just chose is the one thing this view exists to show.
+          */}
+          <ambientLight intensity={0.13} color="#f3f1ea" />
           <pointLight
             position={[0.15, 1.46, 0]}
-            intensity={3.1}
+            intensity={0.82}
             distance={4.2}
             decay={2}
             color="#fff3e0"
           />
           <pointLight
             position={[0.95, 1.18, 0]}
-            intensity={1.9}
+            intensity={0.52}
             distance={3.4}
             decay={2}
             color="#dce9ff"
           />
           <pointLight
             position={[-1.35, 1.32, 0]}
-            intensity={1.5}
+            intensity={0.42}
             distance={3.6}
             decay={2}
             color="#e6ecf2"
