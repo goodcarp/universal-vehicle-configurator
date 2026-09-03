@@ -50,6 +50,7 @@ type StandardMaterialSnapshot = Readonly<{
   emissiveIntensity: number;
   metalness: number;
   roughness: number;
+  envMapIntensity: number;
   opacity: number;
   transparent: boolean;
   depthWrite: boolean;
@@ -68,6 +69,7 @@ const captureMaterialState = (material: Material) => {
     emissiveIntensity: material.emissiveIntensity,
     metalness: material.metalness,
     roughness: material.roughness,
+    envMapIntensity: material.envMapIntensity,
     opacity: material.opacity,
     transparent: material.transparent,
     depthWrite: material.depthWrite,
@@ -93,6 +95,7 @@ const restoreMaterialState = (material: MeshStandardMaterial) => {
   material.emissiveIntensity = snapshot.emissiveIntensity;
   material.metalness = snapshot.metalness;
   material.roughness = snapshot.roughness;
+  material.envMapIntensity = snapshot.envMapIntensity ?? 1;
   material.opacity = snapshot.opacity;
   material.transparent = snapshot.transparent;
   material.depthWrite = snapshot.depthWrite;
@@ -291,21 +294,29 @@ export function applyLicensedVehicleConfiguration(
     restoreMaterialState(material);
 
     if (material.name === LICENSED_VEHICLE_MATERIAL_MAP.paint) {
+      // Automotive paint is two layers: a flake base under a clear coat. The
+      // previous 0.08 metalness made it one glossy dielectric, which reads as
+      // coloured plastic however good the model is. Metalness stays moderate
+      // because the studio environment is soft and a metal tints what it
+      // reflects — push it high and the body goes muddy. The near-smooth
+      // clearcoat is what supplies the sharp highlight.
       material.color.set(paint.color);
-      material.metalness = 0.08;
-      material.roughness = 0.22;
+      material.metalness = 0.34;
+      material.roughness = 0.29;
+      material.envMapIntensity = 1.75;
       material.emissive.set(focus === "paint" ? paint.color : "#000000");
       material.emissiveIntensity = focus === "paint" ? 0.06 : 0;
       if (material instanceof MeshPhysicalMaterial) {
         material.clearcoat = 1;
-        material.clearcoatRoughness = 0.1;
+        material.clearcoatRoughness = 0.035;
       }
     }
 
     if (material.name === LICENSED_VEHICLE_MATERIAL_MAP.glass) {
-      material.color.set("#263d43");
-      material.metalness = 0.14;
-      material.roughness = 0.08;
+      material.color.set("#1b2c31");
+      material.metalness = 0.05;
+      material.roughness = 0.045;
+      material.envMapIntensity = 2.1;
     }
 
     if (material.name === LICENSED_VEHICLE_MATERIAL_MAP.rim) {

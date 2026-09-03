@@ -9,6 +9,7 @@ import {
   type VehicleViewPreset,
 } from "../features/vehicle-canvas";
 import { SCENE_MANIFEST } from "../scene/scene-manifest";
+import { activeVehicleModelSource } from "../scene/vehicle-model-source";
 import { AgentActivity } from "./AgentActivity";
 import { IncentiveSummary } from "./IncentiveSummary";
 import { ToolStatus } from "./ToolStatus";
@@ -186,7 +187,7 @@ export function App() {
     {
       id: "paint",
       label: "Exterior finish",
-      detail: `${paintOption?.label ?? "Representative finish"} · selection rendered on the licensed reference vehicle`,
+      detail: `${paintOption?.label ?? "Representative finish"} · selection rendered on ${activeVehicleModelSource().hotspotBasis}`,
       anchor: SCENE_MANIFEST.anchors.bodyPaint,
       accuracy: "representative",
     },
@@ -288,6 +289,9 @@ export function App() {
             accessories={{ towHitch: Boolean(resolved.specs.tow_hitch) }}
             mode={canvasMode}
             viewPreset={viewPreset}
+            bodyOpen={presentation.bodyOpen}
+            onBodyOpenChange={(nextBodyOpen) =>
+              setPresentationFromUser({ bodyOpen: nextBodyOpen })}
             activeHotspotId={activeHotspot}
             hotspots={hotspots}
             onModeChange={(mode) => setPresentationFromUser({ mode })}

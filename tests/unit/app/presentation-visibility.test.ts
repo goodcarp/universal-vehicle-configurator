@@ -50,6 +50,7 @@ describe("agent presentation visibility", () => {
       mode: "blueprint",
       viewPreset: "profile",
       focus: "charge-port",
+      bodyOpen: false,
     };
 
     expect(presentationSummary(state)).toBe(

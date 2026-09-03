@@ -32,6 +32,8 @@ export type LiveVehicleViewportProps = Readonly<{
   /** Which registered body draws the vehicle. Defaults to the licensed GLB. */
   modelSource?: VehicleModelSourceId;
   mode: LiveVehicleRenderMode;
+  /** 0 shut, 1 fully open. Ignored by bodies that cannot open. */
+  bodyOpen?: number;
   viewPreset: LiveVehicleViewPreset;
   focus: LiveVehicleFocus;
   keyboardOrbit: Readonly<{ yaw: number; pitch: number }>;

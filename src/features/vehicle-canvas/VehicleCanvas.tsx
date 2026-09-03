@@ -3,6 +3,7 @@ import {
   Armchair,
   CircleDot,
   Crosshair,
+  DoorOpen,
   ImageOff,
   LoaderCircle,
   Move,
@@ -28,6 +29,7 @@ import { SCENE_MANIFEST, type NormalizedAnchor } from "../../scene/scene-manifes
 import {
   DEFAULT_VEHICLE_MODEL_SOURCE,
   resolveVehicleModelSource,
+  REQUESTED_VEHICLE_MODEL_SOURCE,
   type VehicleModelSourceId,
 } from "../../scene/vehicle-model-source";
 import { detectWebGLSupport, type WebGLSupport } from "../../scene/webgl-support";
@@ -93,6 +95,9 @@ export type VehicleCanvasProps = Readonly<{
   interior?: VehicleInteriorSelection;
   /** Which registered body draws the vehicle. Defaults to the licensed GLB. */
   modelSource?: VehicleModelSourceId;
+  /** Doors, frunk and liftgate open. Only offered by bodies that can open. */
+  bodyOpen?: boolean;
+  onBodyOpenChange?: (bodyOpen: boolean) => void;
   accessories?: VehicleAccessorySelection;
   mode?: VehicleCanvasMode;
   defaultMode?: VehicleCanvasMode;
@@ -264,6 +269,8 @@ export function VehicleCanvas({
   wheel = DEFAULT_WHEEL,
   interior = DEFAULT_INTERIOR,
   modelSource,
+  bodyOpen = false,
+  onBodyOpenChange,
   accessories = DEFAULT_ACCESSORIES,
   mode,
   defaultMode = "showroom",
@@ -308,15 +315,17 @@ export function VehicleCanvas({
         ? assetStates.angle
         : assetStates.profile;
   // A ?model= override makes the seam switchable without a rebuild, which is
-  // how the procedural body gets compared against the licensed GLB.
+  // how the code-native R2 gets compared against the licensed GLB.
   const activeModelSource: VehicleModelSourceId = useMemo(() => {
     if (modelSource) return modelSource;
-    if (typeof window === "undefined") return DEFAULT_VEHICLE_MODEL_SOURCE;
-    const requested = new URLSearchParams(window.location.search).get("model");
-    return requested === "procedural" || requested === "licensed-glb"
-      ? requested
-      : DEFAULT_VEHICLE_MODEL_SOURCE;
+    return REQUESTED_VEHICLE_MODEL_SOURCE ?? DEFAULT_VEHICLE_MODEL_SOURCE;
   }, [modelSource]);
+
+  // Only offer the control when the body on screen can actually open, so the
+  // affordance never promises something the model cannot do.
+  const canOpenBody = resolveVehicleModelSource(activeModelSource).hasOpenableBody
+    && currentMode === "showroom";
+  const bodyIsOpen = canOpenBody && bodyOpen;
 
   const liveViewRequested = true;
   const liveRendererPending = liveViewRequested
@@ -331,6 +340,14 @@ export function VehicleCanvas({
   const modelAttribution = liveRendererActive
     ? resolveVehicleModelSource(activeModelSource).attribution
     : SCENE_MANIFEST.labels.affiliation;
+  // The title has to move with the attribution. While the authored still is up
+  // it is the licensed reference on screen; once the live body takes over it is
+  // not, and calling it one would be the exact provenance claim this
+  // configurator exists to get right.
+  const modelCredit = resolveVehicleModelSource(activeModelSource).credit;
+  const modelTitle = liveRendererActive
+    ? resolveVehicleModelSource(activeModelSource).sceneTitle
+    : "Licensed compact-SUV reference";
 
   const resolvedHotspots = useMemo<readonly VehicleHotspot[]>(() => hotspots ?? [
     {
@@ -343,7 +360,7 @@ export function VehicleCanvas({
     {
       id: "charge-port",
       label: "Charge port",
-      detail: "Representative feature location on the licensed reference vehicle",
+      detail: `Representative feature location on ${resolveVehicleModelSource(activeModelSource).hotspotBasis}`,
       anchor: SCENE_MANIFEST.anchors.chargePort,
       accuracy: "representative",
     },
@@ -361,7 +378,15 @@ export function VehicleCanvas({
       anchor: SCENE_MANIFEST.anchors.rearHitch,
       accuracy: "representative",
     },
-  ], [hotspots, paint.accuracy, paint.label, wheel.accuracy, wheel.diameterInches, wheel.label]);
+  ], [
+    activeModelSource,
+    hotspots,
+    paint.accuracy,
+    paint.label,
+    wheel.accuracy,
+    wheel.diameterInches,
+    wheel.label,
+  ]);
 
   const activeHotspot = resolvedHotspots.find(({ id }) => id === currentHotspot) ?? null;
   const canvasStyle = {
@@ -582,6 +607,7 @@ export function VehicleCanvas({
                     tone: interior.tone,
                   }}
                   mode={currentMode}
+                  bodyOpen={bodyIsOpen ? 1 : 0}
                   viewPreset={currentPreset}
                   focus={currentHotspot}
                   keyboardOrbit={{ yaw: pan.x * 0.035, pitch: pan.y * 0.025 }}
@@ -599,7 +625,7 @@ export function VehicleCanvas({
         <header className="vc-hud">
           <div className="vc-hud__identity">
             <span className="vc-hud__index">UVC / 01</span>
-            <strong>Licensed compact-SUV reference</strong>
+            <strong>{modelTitle}</strong>
             <span>{modelAttribution}</span>
           </div>
           <div className="vc-mode-switch" aria-label="Vehicle rendering mode">
@@ -618,6 +644,17 @@ export function VehicleCanvas({
               <ScanLine aria-hidden="true" /> Blueprint
             </button>
           </div>
+          {canOpenBody && (
+            <div className="vc-mode-switch vc-mode-switch--open">
+              <button
+                type="button"
+                aria-pressed={bodyIsOpen}
+                onClick={() => onBodyOpenChange?.(!bodyIsOpen)}
+              >
+                <DoorOpen aria-hidden="true" /> {bodyIsOpen ? "Close body" : "Open body"}
+              </button>
+            </div>
+          )}
         </header>
 
         <div className="vc-status" aria-live="polite">
@@ -635,14 +672,18 @@ export function VehicleCanvas({
         </div>
 
         {liveRendererActive && (
-          <a
-            className="vc-model-attribution"
-            href={SCENE_MANIFEST.model.sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Model: Mehdi Lagzouli / LagzDesign + OpenX · CC BY 4.0
-          </a>
+          modelCredit.href ? (
+            <a
+              className="vc-model-attribution"
+              href={modelCredit.href}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {modelCredit.text}
+            </a>
+          ) : (
+            <span className="vc-model-attribution">{modelCredit.text}</span>
+          )
         )}
 
         <div className="vc-object" aria-live="polite">

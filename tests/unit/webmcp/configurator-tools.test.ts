@@ -120,6 +120,7 @@ describe("real configurator Site Tools", () => {
           mode: "showroom",
           viewPreset: "angle",
           focus: "none",
+          bodyOpen: false,
         },
       }),
     );
@@ -362,6 +363,7 @@ describe("real configurator Site Tools", () => {
         mode: "blueprint",
         viewPreset: "profile",
         focus: "wheels",
+        bodyOpen: false,
       },
     });
     expect(listener).toHaveBeenLastCalledWith(
@@ -378,6 +380,7 @@ describe("real configurator Site Tools", () => {
       mode: "showroom",
       viewPreset: "angle",
       focus: "none",
+      bodyOpen: false,
     });
     unsubscribe();
   });
@@ -393,10 +396,48 @@ describe("real configurator Site Tools", () => {
       mode: "blueprint",
       viewPreset: "profile",
       focus: "none",
+      bodyOpen: false,
     });
 
     expect(controller.present({ mode: "blueprint" })).toBe(initial);
     expect(controller.getState()).toBe(initial);
+  });
+
+  it("opens the body on request and shuts it again for blueprint", () => {
+    const controller = createConfiguratorPresentationController();
+
+    expect(controller.present({ bodyOpen: true })).toEqual({
+      revision: 2,
+      mode: "showroom",
+      viewPreset: "angle",
+      focus: "none",
+      bodyOpen: true,
+    });
+
+    // A wireframe of an open door is noise, not information.
+    expect(controller.present({ mode: "blueprint" })).toEqual({
+      revision: 3,
+      mode: "blueprint",
+      viewPreset: "profile",
+      focus: "none",
+      bodyOpen: false,
+    });
+
+    // Asking for an open body while in blueprint does not silently leave
+    // blueprint; the request is simply not honoured until showroom returns.
+    expect(controller.present({ bodyOpen: true })).toEqual({
+      revision: 3,
+      mode: "blueprint",
+      viewPreset: "profile",
+      focus: "none",
+      bodyOpen: false,
+    });
+  });
+
+  it("rejects a non-boolean bodyOpen", () => {
+    expect(() =>
+      toolsByName().get("present_vehicle_configuration")?.execute({ bodyOpen: "yes" }),
+    ).toThrow("non-boolean bodyOpen");
   });
 
   it("rejects malformed direct invocations even if a host skips schema validation", async () => {

@@ -52,12 +52,15 @@ export interface ConfiguratorPresentationState {
   mode: ConfiguratorPresentationMode;
   viewPreset: ConfiguratorViewPreset;
   focus: ConfiguratorFocus;
+  /** Doors, frunk and liftgate open. Ignored by bodies that cannot open. */
+  bodyOpen: boolean;
 }
 
 export interface ConfiguratorPresentationPatch {
   mode?: ConfiguratorPresentationMode;
   viewPreset?: ConfiguratorViewPreset;
   focus?: ConfiguratorFocus;
+  bodyOpen?: boolean;
 }
 
 export interface ConfiguratorPresentationController {
@@ -537,6 +540,7 @@ export function createConfiguratorPresentationController(
         ? "profile"
         : initialViewPreset,
     focus: initial.focus ?? "none",
+    bodyOpen: initial.bodyOpen ?? false,
   };
   const listeners = new Set<(state: ConfiguratorPresentationState) => void>();
 
@@ -548,10 +552,18 @@ export function createConfiguratorPresentationController(
     }
     if (mode === "showroom" && patch.viewPreset === "angle") viewPreset = "angle";
     const focus = patch.focus ?? state.focus;
-    if (mode === state.mode && viewPreset === state.viewPreset && focus === state.focus) {
+    // Blueprint mode draws the body as a wireframe, where an open door reads as
+    // noise rather than as information, so the panels shut when it engages.
+    const bodyOpen = mode === "blueprint" ? false : patch.bodyOpen ?? state.bodyOpen;
+    if (
+      mode === state.mode
+      && viewPreset === state.viewPreset
+      && focus === state.focus
+      && bodyOpen === state.bodyOpen
+    ) {
       return state;
     }
-    state = { revision: state.revision + 1, mode, viewPreset, focus };
+    state = { revision: state.revision + 1, mode, viewPreset, focus, bodyOpen };
     listeners.forEach((listener) => listener(state));
     return state;
   };
@@ -829,13 +841,18 @@ export function createConfiguratorToolDefinitions(
     name: CONFIGURATOR_TOOL_NAMES[6],
     title: "Present vehicle configuration",
     description:
-      "Move the shared vehicle canvas to showroom or blueprint mode, choose an angle/profile/wheel/interior view, and optionally focus a truthful vehicle hotspot. This changes presentation only, never the selected build.",
+      "Move the shared vehicle canvas to showroom or blueprint mode, choose an angle/profile/wheel/interior view, optionally focus a truthful vehicle hotspot, and open or close the body. This changes presentation only, never the selected build.",
     inputSchema: {
       type: "object",
       properties: {
         mode: { type: "string", enum: PRESENTATION_MODES },
         viewPreset: { type: "string", enum: VIEW_PRESETS },
         focus: { type: "string", enum: FOCUS_TARGETS },
+        bodyOpen: {
+          type: "boolean",
+          description:
+            "Swing the doors, frunk and liftgate open. Blueprint mode always shuts them.",
+        },
       },
       minProperties: 1,
       additionalProperties: false,
@@ -844,7 +861,11 @@ export function createConfiguratorToolDefinitions(
     execute: (input, options) => {
       throwIfAborted(options?.signal);
       const record = assertRecord(input, CONFIGURATOR_TOOL_NAMES[6]);
-      assertOnlyKeys(record, ["mode", "viewPreset", "focus"], CONFIGURATOR_TOOL_NAMES[6]);
+      assertOnlyKeys(
+        record,
+        ["mode", "viewPreset", "focus", "bodyOpen"],
+        CONFIGURATOR_TOOL_NAMES[6],
+      );
       if (Object.keys(record).length < 1) {
         throw new TypeError(`${CONFIGURATOR_TOOL_NAMES[6]} requires a presentation change.`);
       }
@@ -866,12 +887,16 @@ export function createConfiguratorToolDefinitions(
       ) {
         throw new TypeError(`${CONFIGURATOR_TOOL_NAMES[6]} received an unsupported focus.`);
       }
+      if (record.bodyOpen !== undefined && typeof record.bodyOpen !== "boolean") {
+        throw new TypeError(`${CONFIGURATOR_TOOL_NAMES[6]} received a non-boolean bodyOpen.`);
+      }
       const previous = presentation.getState();
       const next = presentation.present(
         {
           mode: record.mode as ConfiguratorPresentationMode | undefined,
           viewPreset: record.viewPreset as ConfiguratorViewPreset | undefined,
           focus: record.focus as ConfiguratorFocus | undefined,
+          bodyOpen: record.bodyOpen as boolean | undefined,
         },
         { signal: options?.signal },
       );

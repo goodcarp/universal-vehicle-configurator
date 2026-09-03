@@ -1538,3 +1538,11 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * The open-body control sits with the mode switch rather than in the view rail:
+ * both change how the vehicle is presented, and neither changes the build.
+ */
+.vc-mode-switch--open {
+  margin-left: 0.5rem;
+}

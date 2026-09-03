@@ -18,7 +18,11 @@ export function presentationSummary(state: ConfiguratorPresentationState): strin
       ? " · charging focus"
       : ` · ${state.focus.replace("-", " ")} focus`;
 
-  return `${mode} · ${view}${focus}`;
+  // An open body is the most visible thing on the canvas, so it belongs in a
+  // summary that claims to describe what is on screen.
+  const body = state.bodyOpen ? " · body open" : "";
+
+  return `${mode} · ${view}${focus}${body}`;
 }
 
 export function revealAgentPresentation(
