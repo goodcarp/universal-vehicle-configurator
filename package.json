@@ -8,16 +8,17 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "model:sync": "node scripts/sync-r2-model.mjs",
-    "model:check": "node scripts/sync-r2-model.mjs --check",
-    "dev": "node scripts/sync-r2-model.mjs && vite --host 0.0.0.0",
     "build": "node scripts/sync-r2-model.mjs && tsc --noEmit && vite build",
-    "preview": "vite preview --host 0.0.0.0",
+    "dev": "node scripts/sync-r2-model.mjs && vite --host 0.0.0.0",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "model:check": "node scripts/promote-garage-model.mjs --check",
+    "model:promote": "node scripts/promote-garage-model.mjs",
+    "model:sync": "node scripts/sync-r2-model.mjs",
+    "preview": "vite preview --host 0.0.0.0",
     "test": "node scripts/sync-r2-model.mjs && vitest",
+    "test:model": "vitest run tests/unit/scene/canonical-r2-model.test.ts",
     "test:run": "node scripts/sync-r2-model.mjs && vitest run",
-    "test:model": "vitest run tests/unit/scene/canonical-r2-model.test.ts"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",

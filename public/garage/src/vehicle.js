@@ -151,8 +151,12 @@ function wrapBand(xA, xCap, y, h, off, jHi) {
     const p = loopPoint(sec, j), n = loopNormal(sec, j);
     path.push([x, p[0] + n[0] * off]);
   }
+  // The cap crossing is offset by -off, not +off: `off` is an OUTWARD offset, and outward at the
+  // tail face points along -x. With +off every band sat `off` mm INSIDE the tail skin, behind the
+  // liftgate panel at S.TAIL + 0.002, so the lamp read as a hairline with only its corner ends
+  // showing -- and the three bands stacked in reverse, the brow (meant to be proudest) deepest.
   const w = path[path.length - 1][1], back = [];
-  for (let i = 1; i < 12; i++) back.push([xCap + off, w - 2 * w * i / 12]);
+  for (let i = 1; i < 12; i++) back.push([xCap - off, w - 2 * w * i / 12]);
   const full = [...path, ...back, ...path.slice().reverse().map(q => [q[0], -q[1]])];
   const N = full.length, pos = new Float32Array(N * 2 * 3), idx = [];
   for (let i = 0; i < N; i++) for (let r = 0; r < 2; r++) {
@@ -205,11 +209,6 @@ const HOOD_EDGE = [1.09, 1.11, 1.14, 1.08, 1.12, 1.17, 1.22, 1.28, 1.35, 1.45, 1
 // ---------- apertures (doors / frunk) cut out of the shell lofts by the shaders ----------
 export const CUT = {
   doorZ: 0.55, doorY0: 0.50, doorY1: DLO_TOP, beltY: BELT_Y,
-  // Top of the door-SKIN aperture. The skin patch wraps to J.cTR + 4, which lands ~19 mm under the
-  // belt, so cutting the body all the way to BELT_Y opened a slot wherever the glass did not overlap
-  // (the strips between each door's aperture and its narrower window aperture). The body keeps that
-  // band instead and the glass sits proud of it.
-  skinY1: BELT_Y - 0.022,
   // Bottom of the quarter aperture. BELT_Y is a single number but ZT is not: it rises to 1.225 behind
   // the doors, so back here the greenhouse ring's floor (ZT - 12 mm) is 13 mm ABOVE the belt and a
   // constant cut ran straight past the bottom of the glass. Follow the section instead.
@@ -460,12 +459,15 @@ export function buildVehicle() {
     const yGlass0 = beltY - 0.012;
     const ys = []; for (let r = 0; r < 15; r++) ys.push(yGlass0 + (DLO_TOP - yGlass0) * r / 14);
     const jr = sgn > 0 ? [J.cBR + 1, J.cTR + 3] : [J.cTL + 5, J.cBL + 7];
-    // every glass panel runs 5 mm PAST its aperture on all four edges. Sitting flush inside it leaves
-    // slivers: the surround is offset 4 mm along the section normal, so its cut edge lands a few mm
-    // off the greenhouse's and you see daylight through the difference.
+    // The upper panel spans the WHOLE door, not just the glazed opening: on a real door the window
+    // frame is part of the door, and only the DLO is visible anyway because everything outside the
+    // body's aperture is covered by the surround. Running it door-wide is what lets the aperture be
+    // cut continuously through the belt -- the earlier alternative, leaving a band of body uncut
+    // there, put a solid rail across both door openings that you could see the moment a door swung.
+    // Offset 3 mm, one under the surround's 4 mm, so the two never fight where they overlap.
     const frame = front
-      ? rowGrid(upperSec, ys, () => gxa - 0.005, (y) => Math.min(xb - 0.006, doorGlassX(y) + 0.005), jr, 36, 0.004)
-      : rowGrid(upperSec, ys, () => gxa - 0.005, () => gxb + 0.005, jr, 24, 0.004);
+      ? rowGrid(upperSec, ys, () => xa - 0.005, (y) => Math.min(xb + 0.005, Math.max(doorGlassX(y) + 0.005, gxa)), jr, 40, 0.003)
+      : rowGrid(upperSec, ys, () => xa - 0.005, () => xb + 0.005, jr, 28, 0.003);
     dp.add(rebase(frame, dp.hinge), { sub: 1 });                                                  // window frame + glass
     dp.add(rebase(patchX(lowerSec, sgn > 0 ? [jCrease - 0.04, jCrease + 0.04] : [jCreaseL - 0.04, jCreaseL + 0.04], xs, 0.006), dp.hinge), { sub: 2 }); // crease
     const len = xb - xa, mid = (xa + xb) / 2;
@@ -546,7 +548,11 @@ export function buildVehicle() {
     // and a body-colour brow above. The corner "pills" are simply its ends.
     pillsP.add(wrapBand(T(4.46), S.TAIL, tailY, 0.090, 0.005, J.cTR + 8), { sub: 1 });          // recess
     pillsP.add(wrapBand(T(4.46), S.TAIL, tailY, 0.052, 0.011, J.cTR + 8));                      // lit strip
-    pillsP.add(wrapBand(T(4.46), S.TAIL, tailY + 0.068, 0.024, 0.014, J.cTR + 8), { sub: 2 });  // brow above
+    // brow height is keyed UNDER the section's own top at the tail, not set by a constant: the roll
+    // pulls zt down to 1.178 there, and a brow at tailY + 0.068 = 1.183 sits above the bodywork, so
+    // jAtHeight finds no such height, clamps to the top corner and returns a crossing 60 mm narrower
+    // at each end than the lit strip below it. Invisible while the bands were buried; not any more.
+    pillsP.add(wrapBand(T(4.46), S.TAIL, tailY + 0.050, 0.024, 0.014, J.cTR + 8), { sub: 2 });  // brow above
     for (const sgn of [1, -1]) {
       const vp = onSkin(tailX + 0.12, 0.62, sgn, 0.006);
       pillsP.add(rbox(0.16, 0.075, 0.010, 0.018, 2), { pos: vp, sub: 3 });                      // pressure-relief vent
@@ -851,7 +857,7 @@ export function buildVehicle() {
   const shellNames = order.filter(p => p.category === 'shell').map(p => p.name);
   const pickables = []; for (const p of order) pickables.push(...p.meshes);
   const lampIds = [parts.headlamps.id, parts.lightBar.id];
-  const tailIds = [parts.tailgate.id, parts.tailPills.id];
+  const tailIds = [parts.tailPills.id, 0];   // only the lit strip (sub 0) glows; see isTail in blueprint.js
 
   const V = {
     root, body, parts, order, wheels, doors, pickables, lampIds, tailIds, shellNames, SPEC: S, dissolve, hidden,
@@ -876,10 +882,13 @@ export function buildVehicle() {
       this.body.position.y = this.bob; this.body.rotation.z = st.drive ? Math.sin(t * 2.2) * 0.006 : 0; this.body.rotation.x = st.drive ? Math.sin(t * 3.1) * 0.004 : 0;
       for (const w of this.wheels) { const wob = st.drive ? Math.sin(t * 7.7 + w.sgn * 1.3 + (w.front ? 0 : 2.1)) * 0.008 : 0; w.part.group.position.y = w.part.rest.y + wob + (w.part.explode.y * this.explodeT); }
       for (const p of this.order) {
+        // the isolation check comes FIRST: running parts return early below, so a check placed after
+        // that branch could never hide a wheel, and every ?only= capture silently kept all four
+        if (this.hidden.has(p.name)) p.group.visible = false;
+        else if (p.category !== 'shell') p.group.visible = true;
         if (p.category === 'running') { p.group.position.z = p.rest.z + p.explode.z * this.explodeT; continue; }
         p.group.position.set(p.rest.x + p.explode.x * this.explodeT, p.rest.y + p.explode.y * this.explodeT, p.rest.z + p.explode.z * this.explodeT);
-        if (p.category === 'shell') p.group.visible = this.panelsT > 0.001;
-        if (this.hidden.has(p.name)) p.group.visible = false;
+        if (p.category === 'shell' && !this.hidden.has(p.name)) p.group.visible = this.panelsT > 0.001;
       }
       dissolve.value = this.panelsT;
       // OPEN: hood, liftgate, four doors and the charge-port door

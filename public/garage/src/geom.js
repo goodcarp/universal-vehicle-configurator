@@ -193,11 +193,11 @@ export function cutGLSL(C) {
 bool inAperture(vec3 p){
   float az = abs(p.z);
   // doors: lower skins between the rocker top and the belt, upper frames up to the roof band. The
-  // aperture runs CONTINUOUSLY through the belt: leaving a band uncut there exposes the greenhouse
-  // ring's own bottom fillet, which faces up and lights as a bright ledge along every window.
+  // aperture runs CONTINUOUSLY from the rocker to the roof band -- it is a door opening, and a band
+  // of body left uncut anywhere inside it is a bar across the doorway once the door swings.
   if (az > ${f(C.doorZ)} && p.y > ${f(C.doorY0)} && p.y < ${f(C.doorY1)}) {
     bool lower = p.y < ${f(C.beltY)};
-    if (!lower || p.y < ${f(C.skinY1)}) {
+    {
     float qf = ${f(C.quarterY0[0][1])}${C.quarterY0.slice(0, -1).map((k, i) => {
       const n = C.quarterY0[i + 1], m = (n[1] - k[1]) / (n[0] - k[0]);
       return `\n             + ${f(m)} * clamp(p.x - ${f(k[0])}, 0.0, ${f(n[0] - k[0])})`;
