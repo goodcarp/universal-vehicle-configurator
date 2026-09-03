@@ -135,11 +135,12 @@
   transform: translate(-50%, -50%);
 }
 
+/* Only the healthy live composite hides the authored frames. While the GLB is
+   still downloading the authored art stays up, so the stage is never empty;
+   .vc-live-layer starts at opacity 0 and fades in over it, so there is no
+   doubled silhouette during the handoff. */
 .vehicle-canvas[data-renderer="live_3d"] .vc-angle-view,
-.vehicle-canvas[data-renderer="live_3d"] .vc-profile-view,
-.vehicle-canvas[data-live-status="loading"] .vc-angle-view,
-.vehicle-canvas[data-live-status="loading"] .vc-profile-view,
-.vehicle-canvas[data-live-status="loading"] .vc-wheel {
+.vehicle-canvas[data-renderer="live_3d"] .vc-profile-view {
   opacity: 0;
   pointer-events: none;
 }
@@ -757,9 +758,11 @@
 .vc-material-sample {
   position: absolute;
   z-index: 12;
-  right: 1.5%;
-  top: 12%;
-  width: clamp(4.5rem, 8vw, 6.4rem);
+  right: 1.2rem;
+  /* Tucked under the mode switch, in clear sky, so it never lands on the car. */
+  top: 5.4rem;
+  bottom: auto;
+  width: clamp(2.9rem, 4.4vw, 3.7rem);
   aspect-ratio: 1;
   padding: 0.38rem;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -789,8 +792,9 @@
 .vc-interior-view__caption {
   position: absolute;
   z-index: 13;
-  right: 1.5%;
-  top: calc(12% + clamp(5.2rem, 9vw, 7.1rem));
+  right: 1.2rem;
+  top: calc(5.4rem + clamp(2.9rem, 4.4vw, 3.7rem) + 0.45rem);
+  bottom: auto;
   display: grid;
   justify-items: end;
   gap: 0.18rem;
@@ -822,7 +826,7 @@
   letter-spacing: -0.03em;
 }
 
-.vehicle-canvas[data-preset="interior"][data-mode="showroom"] .vc-stage {
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"][data-mode="showroom"] .vc-stage {
   color: #ecf4ee;
   border-color: rgba(184, 206, 191, 0.15);
   background:
@@ -830,56 +834,68 @@
     linear-gradient(148deg, #161b18, #090c0a 58%, #171c18);
 }
 
-.vehicle-canvas[data-preset="interior"] .vc-environment__grid {
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-environment__grid {
   opacity: 0.1;
   background-image:
     linear-gradient(rgba(202, 221, 208, 0.12) 1px, transparent 1px),
     linear-gradient(90deg, rgba(202, 221, 208, 0.12) 1px, transparent 1px);
 }
 
-.vehicle-canvas[data-preset="interior"] .vc-environment__orbit {
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-environment__orbit {
   border-color: rgba(196, 218, 202, 0.12);
 }
 
-.vehicle-canvas[data-preset="interior"] .vc-environment__ground {
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-environment__ground {
   opacity: 0;
 }
 
-.vehicle-canvas[data-preset="interior"] .vc-hud__identity > span:last-child,
-.vehicle-canvas[data-preset="interior"] .vc-hud__index,
-.vehicle-canvas[data-preset="interior"] .vc-status,
-.vehicle-canvas[data-preset="interior"] .vc-footer {
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-hud__identity > span:last-child,
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-hud__index,
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-status,
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-footer {
   color: rgba(224, 239, 229, 0.54);
 }
 
-.vehicle-canvas[data-preset="interior"] .vc-mode-switch {
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-mode-switch {
   border-color: rgba(213, 232, 219, 0.15);
   background: rgba(8, 12, 10, 0.64);
 }
 
-.vehicle-canvas[data-preset="interior"] .vc-mode-switch button {
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-mode-switch button {
   color: rgba(225, 239, 229, 0.58);
 }
 
-.vehicle-canvas[data-preset="interior"] .vc-mode-switch button[aria-pressed="true"] {
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-mode-switch button[aria-pressed="true"] {
   color: #eef5f0;
   background: rgba(103, 122, 109, 0.3);
 }
 
-.vehicle-canvas[data-preset="interior"] .vc-view-picker > button {
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-view-picker > button {
   color: rgba(226, 239, 230, 0.54);
   border-color: rgba(218, 235, 223, 0.14);
   background: rgba(7, 11, 8, 0.66);
 }
 
-.vehicle-canvas[data-preset="interior"] .vc-view-picker > button[aria-pressed="true"] {
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-view-picker > button[aria-pressed="true"] {
   color: #f0f6f2;
   border-color: rgba(214, 235, 220, 0.58);
   background: rgba(79, 96, 84, 0.48);
 }
 
-.vehicle-canvas[data-preset="interior"] .vc-view-picker__thumbnail {
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-view-picker__thumbnail {
   background: #151b17;
+}
+
+/* On the live path the stage stays light, so the caption authored for the dark
+   cabin mock has to flip to ink or it is invisible over the bodywork. */
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-interior-view__caption {
+  color: rgba(23, 33, 29, 0.9);
+  text-shadow: 0 1px 2px rgba(250, 249, 245, 0.75);
+}
+
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-interior-view__caption > span,
+.vehicle-canvas[data-renderer="live_3d"][data-preset="interior"] .vc-interior-view__caption small {
+  color: rgba(23, 33, 29, 0.62);
 }
 
 .vc-angle-view__image,
@@ -1318,9 +1334,9 @@
 .vehicle-canvas[data-preset="wheel"] .vc-hud__identity,
 .vehicle-canvas[data-preset="wheel"] .vc-status,
 .vehicle-canvas[data-preset="wheel"] .vc-model-attribution,
-.vehicle-canvas[data-preset="interior"] .vc-hud__identity,
-.vehicle-canvas[data-preset="interior"] .vc-status,
-.vehicle-canvas[data-preset="interior"] .vc-model-attribution {
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-hud__identity,
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-status,
+.vehicle-canvas:not([data-renderer="live_3d"])[data-preset="interior"] .vc-model-attribution {
   opacity: 0;
   pointer-events: none;
 }

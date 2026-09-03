@@ -51,10 +51,10 @@
 
 .configurator-head__model h2 {
   margin: 0;
-  font-size: clamp(2.35rem, 3.5vw, 3rem);
+  font-size: clamp(2.6rem, 4vw, 3.75rem);
   font-weight: 480;
-  line-height: 0.92;
-  letter-spacing: -0.07em;
+  line-height: 0.94;
+  letter-spacing: -0.038em;
 }
 
 .configurator-head__model p {
@@ -65,7 +65,7 @@
 
 .configurator-head__specs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(3.5rem, 1fr));
+  grid-template-columns: repeat(3, minmax(4rem, 1fr));
   align-self: end;
   min-width: 0;
 }
@@ -83,15 +83,15 @@
 }
 
 .configurator-head__specs strong {
-  font-size: 0.9rem;
-  font-weight: 650;
-  letter-spacing: -0.035em;
+  font-size: 1.2rem;
+  font-weight: 620;
+  letter-spacing: -0.03em;
 }
 
 .configurator-head__specs span {
-  margin-top: 0.25rem;
+  margin-top: 0.3rem;
   color: var(--rail-muted);
-  font-size: 0.59rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -612,6 +612,49 @@
   margin-top: 1rem;
 }
 
+.buyer-context__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 1.15rem;
+}
+
+.buyer-context label.buyer-context__field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+  min-height: 0;
+  padding: 0.6rem 0.7rem;
+  cursor: default;
+}
+
+.buyer-context__field .buyer-context__label {
+  margin-bottom: 0;
+}
+
+.buyer-context__field select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.3rem 0.1rem;
+  border: 0;
+  background: transparent;
+  color: var(--rail-ink);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.buyer-context__field:has(select:focus-visible) {
+  outline: 3px solid color-mix(in srgb, var(--rail-green) 24%, transparent);
+  outline-offset: 2px;
+}
+
+.buyer-context__field select:focus {
+  outline: none;
+}
+
 .buyer-context__label {
   display: block;
   margin-bottom: 0.55rem;
@@ -868,6 +911,10 @@
   }
 
   .buyer-context__segments {
+    grid-template-columns: 1fr;
+  }
+
+  .buyer-context__grid {
     grid-template-columns: 1fr;
   }
 

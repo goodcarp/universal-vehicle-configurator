@@ -24,11 +24,17 @@ type ModelContextTool<Input extends Record<string, unknown> = Record<string, unk
   ) => Promise<unknown> | unknown;
 };
 
+type ModelContextApi = {
+  registerTool: <Input extends Record<string, unknown> = Record<string, unknown>>(
+    tool: ModelContextTool<Input>,
+    options?: ModelContextRegisterToolOptions,
+  ) => Promise<void>;
+};
+
 interface Document {
-  modelContext?: {
-    registerTool: <Input extends Record<string, unknown> = Record<string, unknown>>(
-      tool: ModelContextTool<Input>,
-      options?: ModelContextRegisterToolOptions,
-    ) => Promise<void>;
-  };
+  modelContext?: ModelContextApi;
+}
+
+interface Navigator {
+  modelContext?: ModelContextApi;
 }

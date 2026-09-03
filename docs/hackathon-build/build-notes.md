@@ -33,8 +33,8 @@ because the source has no cabin geometry.
 - Tow selection that adds or removes hitch geometry.
 - Studio lighting, environment reflections, ground/contact shadows, and a
   bounded device-pixel ratio for a polished but performance-aware presentation.
-- Null loading boundary plus same-GLB capture fallback after unsupported,
-  failed, or lost WebGL contexts.
+- Same-GLB captures hold the stage during GLB download and after unsupported,
+  failed, or lost WebGL contexts; the live layer cross-fades in on top.
 - DOM safety-frame layers are forced out of the healthy WebGL composite to
   prevent doubled silhouettes and stale paint ghosting.
 

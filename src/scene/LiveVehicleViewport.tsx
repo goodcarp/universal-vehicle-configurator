@@ -19,8 +19,12 @@ import {
   SRGBColorSpace,
 } from "three";
 import { getCameraPose } from "./camera-presets";
+import { CabinInterior } from "./CabinInterior";
 import { LicensedVehicleModel } from "./LicensedVehicleModel";
-import type { LiveVehicleViewportProps } from "./live-vehicle.types";
+import type {
+  LiveVehicleRenderMode,
+  LiveVehicleViewportProps,
+} from "./live-vehicle.types";
 import "./live-vehicle.css";
 
 class LicensedModelBoundary extends Component<
@@ -114,24 +118,31 @@ function ContextLossMonitor({
   return null;
 }
 
-function Studio({ mode }: Pick<LiveVehicleViewportProps, "mode">) {
+function Studio({
+  mode,
+  grounded = true,
+}: Readonly<{ mode: LiveVehicleRenderMode; grounded?: boolean }>) {
+  // Nothing here casts shadows, so the exterior rig shines straight through the
+  // cabin's headliner and flattens it. Inside, drop it to a rim contribution
+  // and let CabinInterior's own lights model the room.
+  const rig = grounded ? 1 : 0.16;
   const blueprint = mode === "blueprint";
   return (
     <>
-      <ambientLight intensity={blueprint ? 0.48 : 0.34} color={blueprint ? "#a7efff" : "#eef4ef"} />
+      <ambientLight intensity={(blueprint ? 0.48 : 0.34) * rig} color={blueprint ? "#a7efff" : "#eef4ef"} />
       <directionalLight
         position={[4.5, 7.5, 5.5]}
-        intensity={blueprint ? 0.72 : 1.5}
+        intensity={(blueprint ? 0.72 : 1.5) * rig}
         color={blueprint ? "#b8f4ff" : "#fff4dd"}
       />
       <directionalLight
         position={[-5.5, 3.2, -3.8]}
-        intensity={blueprint ? 1.05 : 0.82}
+        intensity={(blueprint ? 1.05 : 0.82) * rig}
         color={blueprint ? "#43bed9" : "#b9dfd8"}
       />
       <spotLight
         position={[0, 7, -2.5]}
-        intensity={blueprint ? 8 : 18}
+        intensity={(blueprint ? 8 : 18) * rig}
         angle={0.62}
         penumbra={0.9}
         distance={16}
@@ -177,6 +188,7 @@ function Studio({ mode }: Pick<LiveVehicleViewportProps, "mode">) {
           infiniteGrid={false}
         />
       )}
+      {grounded && (
       <mesh rotation-x={-Math.PI / 2} position-y={0.015} receiveShadow>
         <circleGeometry args={[7.5, 64]} />
         <meshStandardMaterial
@@ -187,6 +199,8 @@ function Studio({ mode }: Pick<LiveVehicleViewportProps, "mode">) {
           opacity={blueprint ? 0.18 : 0.3}
         />
       </mesh>
+      )}
+      {grounded && (
       <ContactShadows
         position={[0, 0.025, 0]}
         scale={8.5}
@@ -197,26 +211,35 @@ function Studio({ mode }: Pick<LiveVehicleViewportProps, "mode">) {
         frames={1}
         color="#1b2620"
       />
+      )}
     </>
   );
 }
 
 function VehicleScene(props: LiveVehicleViewportProps) {
+  // Interior swaps the exterior shell for the cabin rather than drawing one
+  // inside the other: from a camera in the driver's seat the body's front
+  // faces are culled anyway, so keeping it would just leak the studio in.
+  const insideCabin = props.viewPreset === "interior" && props.mode === "showroom";
+
   return (
     <>
-      <Studio mode={props.mode} />
-      <LicensedModelBoundary fallback={null} onFailure={props.onFailure}>
-        <Suspense fallback={null}>
-          <LicensedVehicleModel
-            paint={props.paint}
-            wheel={props.wheel}
-            accessories={props.accessories}
-            focus={props.focus}
-            mode={props.mode}
-            onReady={props.onReady}
-          />
-        </Suspense>
-      </LicensedModelBoundary>
+      <Studio mode={props.mode} grounded={!insideCabin} />
+      <group visible={!insideCabin}>
+        <LicensedModelBoundary fallback={null} onFailure={props.onFailure}>
+          <Suspense fallback={null}>
+            <LicensedVehicleModel
+              paint={props.paint}
+              wheel={props.wheel}
+              accessories={props.accessories}
+              focus={props.focus}
+              mode={props.mode}
+              onReady={props.onReady}
+            />
+          </Suspense>
+        </LicensedModelBoundary>
+      </group>
+      <CabinInterior interior={props.interior} visible={insideCabin} />
       <CameraDirector
         viewPreset={props.viewPreset}
         focus={props.focus}

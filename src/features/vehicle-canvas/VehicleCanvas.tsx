@@ -230,7 +230,7 @@ function InteriorView({ interior }: Readonly<{ interior: VehicleInteriorSelectio
       <div className="vc-interior-view__caption">
         <span><Armchair aria-hidden="true" /> Interior palette</span>
         <strong>{interior.label}</strong>
-        <small>Material preview only · cabin geometry not modeled</small>
+        <small>Representative cabin · not a manufacturer interior</small>
       </div>
     </div>
   );
@@ -548,6 +548,12 @@ export function VehicleCanvas({
                     style: wheel.style ?? "aero",
                   }}
                   accessories={accessories}
+                  interior={{
+                    color: interior.color,
+                    accentColor: interior.accentColor,
+                    material: interior.material,
+                    tone: interior.tone,
+                  }}
                   mode={currentMode}
                   viewPreset={currentPreset}
                   focus={currentHotspot}

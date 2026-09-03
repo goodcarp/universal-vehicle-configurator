@@ -1,4 +1,4 @@
-import { Check, CircleDashed, Copy, Share2, Sparkles, Undo2, X } from "lucide-react";
+import { Copy, Share2, Sparkles, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { VehicleConfigurator } from "../features/configurator";
 import {
@@ -9,6 +9,9 @@ import {
   type VehicleViewPreset,
 } from "../features/vehicle-canvas";
 import { SCENE_MANIFEST } from "../scene/scene-manifest";
+import { AgentActivity } from "./AgentActivity";
+import { IncentiveSummary } from "./IncentiveSummary";
+import { ToolStatus } from "./ToolStatus";
 import {
   applyShareStateToHistory,
   bindShareStatePopstate,
@@ -17,12 +20,14 @@ import {
   restoreShareStateFromSearch,
   r2Catalog,
   selectCanUndo,
+  selectLastTransaction,
   selectResolved,
   selectRevision,
   useConfiguratorStore,
 } from "../state";
 import {
   configuratorPresentation,
+  observeConfiguratorSiteTools,
   registerConfiguratorSiteTools,
   type ConfiguratorSiteToolsStatus,
 } from "../webmcp/configurator-tools";
@@ -51,24 +56,6 @@ type ChangeNotice = {
   source: "agent" | "human";
 };
 
-function ToolStatus({ status }: { status: ConfiguratorSiteToolsStatus }) {
-  const ready = status.state === "ready";
-  const label = ready
-    ? `${status.toolNames.length} agent tools`
-    : status.state === "unsupported"
-      ? "Manual mode"
-      : status.state === "degraded"
-        ? "Agent unavailable"
-        : "Connecting agent";
-
-  return (
-    <span className="header-action" data-state={status.state} aria-live="polite">
-      {ready ? <Check aria-hidden="true" /> : <CircleDashed aria-hidden="true" />}
-      <span>{label}</span>
-    </span>
-  );
-}
-
 export function App() {
   const catalog = useConfiguratorStore((state) => state.catalog);
   const domain = useConfiguratorStore((state) => state.domain);
@@ -78,6 +65,8 @@ export function App() {
   const activeAgentTransaction = useConfiguratorStore(
     (state) => state.session.activeAgentTransaction,
   );
+  const lastTransaction = useConfiguratorStore(selectLastTransaction);
+  const [dismissedReceiptId, setDismissedReceiptId] = useState<string | null>(null);
   const [siteTools, setSiteTools] = useState<ConfiguratorSiteToolsStatus>(INITIAL_TOOL_STATUS);
   const [presentation, setPresentation] = useState(() => configuratorPresentation.getState());
   const [changeNotice, setChangeNotice] = useState<ChangeNotice | null>(null);
@@ -87,7 +76,11 @@ export function App() {
   const pendingHumanPresentationRevision = useRef<number | null>(null);
 
   useEffect(() => {
-    void registerConfiguratorSiteTools().then(setSiteTools);
+    // Subscribe first: a host that injects the API after first paint upgrades
+    // this status in place instead of leaving the page stuck in Manual mode.
+    const unobserve = observeConfiguratorSiteTools(setSiteTools);
+    void registerConfiguratorSiteTools();
+    return unobserve;
   }, []);
 
   useEffect(() => configuratorPresentation.subscribe((nextPresentation) => {
@@ -134,6 +127,35 @@ export function App() {
     const timer = window.setTimeout(() => setChangeNotice(null), 2_800);
     return () => window.clearTimeout(timer);
   }, [changeNotice]);
+
+  // An agent rewriting the build is the headline behaviour. Announce it in the
+  // same live region the human's own edits use, so it is never silent.
+  useEffect(() => {
+    let seen = configuratorStore.getState().session.lastTransaction?.id ?? null;
+    return configuratorStore.subscribe((state) => {
+      const receipt = state.session.lastTransaction;
+      if (!receipt || receipt.id === seen) return;
+      seen = receipt.id;
+      const applied = receipt.completedStages.length;
+      const skipped = receipt.skippedStages.length;
+      setChangeNotice({
+        title:
+          receipt.status === "interrupted"
+            ? "You interrupted the agent"
+            : "Agent updated the build",
+        detail: [
+          `${applied} of ${applied + skipped} steps applied`,
+          formatCurrency(receipt.afterSummary.vehicleTotal),
+          receipt.afterSummary.rangeMiles === null
+            ? null
+            : `${receipt.afterSummary.rangeMiles} mi`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        source: "agent",
+      });
+    });
+  }, []);
 
   const buildOption = selectedOption(catalog, resolved, "build");
   const paintOption = selectedOption(catalog, resolved, "paint");
@@ -277,23 +299,6 @@ export function App() {
             }
           />
 
-          {changeNotice && (
-            <aside
-              className="configuration-change"
-              data-source={changeNotice.source}
-              aria-live="polite"
-            >
-              <Sparkles aria-hidden="true" />
-              <div>
-                <strong>{changeNotice.title}</strong>
-                <span>{changeNotice.detail}</span>
-              </div>
-              <button type="button" onClick={() => setChangeNotice(null)} aria-label="Dismiss change summary">
-                <X aria-hidden="true" />
-              </button>
-            </aside>
-          )}
-
           <div className="configuration-facts" aria-label="Current configuration quick facts">
             <span><small>Vehicle total</small><strong>{formatCurrency(resolved.price.vehicleTotal)}</strong></span>
             <span><small>Range</small><strong>{String(resolved.specs.range_mi ?? "—")} mi</strong></span>
@@ -303,6 +308,34 @@ export function App() {
 
         <aside className="configurator-rail" aria-label="Configuration choices">
           <div className="configurator-rail__inner">
+            {(changeNotice || (lastTransaction && lastTransaction.id !== dismissedReceiptId)) && (
+              <div className="rail-activity">
+                {changeNotice && (
+                  <aside
+                    className="configuration-change"
+                    data-source={changeNotice.source}
+                    aria-live="polite"
+                  >
+                    <Sparkles aria-hidden="true" />
+                    <div>
+                      <strong>{changeNotice.title}</strong>
+                      <span>{changeNotice.detail}</span>
+                    </div>
+                    <button type="button" onClick={() => setChangeNotice(null)} aria-label="Dismiss change summary">
+                      <X aria-hidden="true" />
+                    </button>
+                  </aside>
+                )}
+                {lastTransaction && lastTransaction.id !== dismissedReceiptId && (
+                  <AgentActivity
+                    receipt={lastTransaction}
+                    canUndo={canUndo}
+                    onUndo={handleUndo}
+                    onDismiss={() => setDismissedReceiptId(lastTransaction.id)}
+                  />
+                )}
+              </div>
+            )}
             <VehicleConfigurator
               catalog={catalog}
               selections={domain.selections}
@@ -331,27 +364,25 @@ export function App() {
                   meta.candidate.delivery?.window ?? null,
                 ].filter(Boolean).join(" · ");
 
+                // Say what else had to move so an auto-resolved pick is never a
+                // silent surprise.
+                const companions = meta.companionChanges ?? [];
+                const detailWithCompanions = [
+                  detail || null,
+                  companions.length > 0 ? `also switched ${companions.join(" and ")}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
+
                 setChangeNotice({
                   title: nextOption?.label ?? "Configuration updated",
-                  detail: detail || "Applied to the current build",
+                  detail: detailWithCompanions || "Applied to the current build",
                   source: "human",
                 });
-                if (changedGroup === "wheels") {
-                  setPresentationFromUser({
-                    viewPreset: "profile",
-                    focus: "wheels",
-                  });
-                } else if (changedGroup === "paint") {
-                  setPresentationFromUser({ focus: "paint" });
-                } else if (changedGroup === "interior") {
-                  setPresentationFromUser({
-                    mode: "showroom",
-                    viewPreset: "interior",
-                    focus: "none",
-                  });
-                } else if (changedGroup === "towing") {
-                  setPresentationFromUser({ focus: "utility" });
-                }
+
+                // The camera belongs to whoever is driving. Selecting a colour
+                // or an interior used to yank the view, which made the viewer
+                // feel broken; only the person and the agent move it now.
               }}
               onBuyerContextChange={(patch) => {
                 configuratorMutations.setBuyerContext({
@@ -415,8 +446,13 @@ export function App() {
               )}
             </div>
 
+            <IncentiveSummary catalog={catalog} incentives={resolved.incentives} />
+
             <footer>
               <p>Independent buyer-side estimate. Verify pricing, availability, taxes, and eligibility with the seller.</p>
+              {catalog.product.disclaimer && (
+                <p className="review-sheet__disclaimer">{catalog.product.disclaimer}</p>
+              )}
               <button type="button" onClick={() => void handleShare()}>
                 <Share2 aria-hidden="true" /> {shareStatus === "copied" ? "Build link copied" : "Copy build link"}
               </button>

@@ -23,6 +23,10 @@ import type {
   SelectionPatch,
 } from "../../domain/catalog.types";
 import { resolve, resolveAtomicPatch } from "../../domain/resolve";
+import {
+  readableCompatibilityReason,
+  trimBuildLabel,
+} from "./compatibility-copy";
 import "./configurator.css";
 
 const usd = new Intl.NumberFormat("en-US", {
@@ -44,11 +48,43 @@ const CROSS_SHOP_OPTIONS = [
   { id: "ioniq_5", label: "Hyundai IONIQ 5" },
 ] as const;
 
+/**
+ * The four facts below are the ones catalog incentive predicates actually
+ * read. Without them the engine can only ever report "missing context".
+ */
+const US_STATES = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID",
+  "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO",
+  "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA",
+  "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+] as const;
+
+const UTILITY_OPTIONS = [
+  { id: "unknown", label: "Not sure yet" },
+  { id: "xcel", label: "Xcel Energy" },
+] as const;
+
+const CHARGING_OPTIONS = [
+  { id: "unknown", label: "Not sure yet" },
+  { id: "home_l2_possible", label: "Can install home Level 2" },
+  { id: "home_l1", label: "Standard outlet only" },
+  { id: "routine_public", label: "Mostly public charging" },
+  { id: "poor_fit", label: "No reliable charging" },
+] as const;
+
+const FINANCING_OPTIONS = [
+  { id: "unknown", label: "Not sure yet" },
+  { id: "yes", label: "Financing or loan" },
+  { id: "no", label: "Paying cash" },
+] as const;
+
 export interface SelectionChangeMeta {
   source: "option" | "compatible-alternative";
   candidate: ResolveResult;
   changedGroups: string[];
   primaryGroup: string;
+  /** Labels of groups changed alongside the one the person clicked. */
+  companionChanges?: string[];
 }
 
 export interface InvalidSelectionMeta {
@@ -128,10 +164,6 @@ function orderabilityLabel(option: CatalogOption): string {
   return "Explore only";
 }
 
-function trimBuildLabel(label: string): string {
-  return label.replace(/^R2\s+/, "").replace(/\s+\(Launch Package\)$/, "");
-}
-
 function valueAsNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -173,24 +205,6 @@ function describeAlternative(
     return after.map((id) => catalog.options.find((option) => option.id === id)?.label ?? id);
   });
   return changes.length > 0 ? changes.map(trimBuildLabel).join(" + ") : "Compatible configuration";
-}
-
-function readableCompatibilityReason(violation: DomainViolation, catalog: Catalog): string {
-  const requiredIds = Array.from(
-    violation.message.matchAll(/requires option '([^']+)'/gu),
-    (match) => match[1],
-  );
-  if (requiredIds.length === 0) return violation.message;
-
-  const labels = requiredIds.map((id) => {
-    const option = catalog.options.find((candidate) => candidate.id === id);
-    return trimBuildLabel(option?.label ?? id);
-  });
-  const finalLabel = labels.at(-1);
-  const list = labels.length === 1
-    ? finalLabel
-    : `${labels.slice(0, -1).join(", ")}, or ${finalLabel}`;
-  return `This option is not available with this build. It pairs with ${list}.`;
 }
 
 function PaintSwatch({ option }: { option: CatalogOption }) {
@@ -385,8 +399,93 @@ function BuyerContextPanel({ result, onChange, instanceId }: BuyerContextPanelPr
         <Sparkles aria-hidden="true" /> Tune the guidance
       </legend>
       <p id={`${instanceId}-buyer-intro`}>
-        Two quick signals help the concierge explain charging, tradeoffs, and the vehicles you already know.
+        Incentives are jurisdiction- and situation-specific. Tell us only what you
+        actually know and the engine will explain the rest rather than guess.
       </p>
+      <div className="buyer-context__grid">
+        <label className="buyer-context__field">
+          <span className="buyer-context__label">Your state</span>
+          <select
+            value={result.buyerContext.state}
+            onChange={(event) =>
+              onChange({
+                state: event.target.value as BuyerContextInput["state"],
+              })
+            }
+          >
+            <option value="unknown">Not set</option>
+            {US_STATES.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="buyer-context__field">
+          <span className="buyer-context__label">Electric utility</span>
+          <select
+            value={result.buyerContext.utility}
+            onChange={(event) =>
+              onChange({
+                utility: event.target.value as BuyerContextInput["utility"],
+              })
+            }
+          >
+            {UTILITY_OPTIONS.map((utility) => (
+              <option key={utility.id} value={utility.id}>
+                {utility.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="buyer-context__field">
+          <span className="buyer-context__label">Home charging</span>
+          <select
+            value={result.buyerContext.chargingSituation}
+            onChange={(event) =>
+              onChange({
+                chargingSituation: event.target
+                  .value as BuyerContextInput["chargingSituation"],
+              })
+            }
+          >
+            {CHARGING_OPTIONS.map((charging) => (
+              <option key={charging.id} value={charging.id}>
+                {charging.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="buyer-context__field">
+          <span className="buyer-context__label">Paying how</span>
+          <select
+            value={
+              result.buyerContext.financing === "unknown"
+                ? "unknown"
+                : result.buyerContext.financing
+                  ? "yes"
+                  : "no"
+            }
+            onChange={(event) =>
+              onChange({
+                financing:
+                  event.target.value === "unknown"
+                    ? "unknown"
+                    : event.target.value === "yes",
+              })
+            }
+          >
+            {FINANCING_OPTIONS.map((financing) => (
+              <option key={financing.id} value={financing.id}>
+                {financing.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="buyer-context__block">
         <span className="buyer-context__label">Your EV experience</span>
         <div className="buyer-context__segments">
@@ -483,20 +582,30 @@ export function VehicleConfigurator({
     if (group.select === "one" && selectedIds(result, group.id).includes(option.id)) return;
 
     if (!projection.candidate.valid) {
-      const alternatives = findCompatibleAlternatives(
+      // Keep the choice the person actually made and resolve the build around
+      // it. Alternatives that change the clicked group back would undo the
+      // pick, so they are never a rescue.
+      const rescues = findCompatibleAlternatives(
         catalog,
         projection.candidate.selections,
         result.buyerContext,
         5,
-      );
+      ).filter((alternative) => !alternative.changedGroups.includes(group.id));
+
+      const rescue = rescues[0];
+      if (rescue) {
+        applyAlternative(rescue, group.id);
+        return;
+      }
+
+      // Genuinely unreachable: explain in place, without moving the scroll.
       const attempted: BlockedAttempt = {
         option,
         candidate: projection.candidate,
-        alternatives,
+        alternatives: [],
         resolutionKey,
       };
       setBlocked(attempted);
-      scrollRef.current?.scrollTo?.({ top: 0, behavior: "smooth" });
       onInvalidSelection?.(attempted);
       return;
     }
@@ -510,17 +619,32 @@ export function VehicleConfigurator({
     });
   };
 
-  const applyAlternative = (alternative: CompatibleAlternative) => {
+  const applyAlternative = (
+    alternative: CompatibleAlternative,
+    intendedGroup?: string,
+  ) => {
     const patch = selectionDiff(catalog, result.selections, alternative.selections);
     const candidate = resolve(catalog, alternative.selections, result.buyerContext);
     setBlocked(null);
     const changedGroups = Object.keys(patch.set);
     if (changedGroups.length === 0) return;
+    const primaryGroup = intendedGroup ?? activeBlocked?.option.group ?? changedGroups[0];
+    const companionChanges = changedGroups
+      .filter((groupId) => groupId !== primaryGroup)
+      .flatMap((groupId) =>
+        (patch.set[groupId] ?? []).map((optionId) =>
+          trimBuildLabel(
+            catalog.options.find((candidateOption) => candidateOption.id === optionId)?.label ??
+              optionId,
+          ),
+        ),
+      );
     onSelectionPatch(patch, {
       source: "compatible-alternative",
       candidate,
       changedGroups,
-      primaryGroup: activeBlocked?.option.group ?? changedGroups[0],
+      primaryGroup,
+      companionChanges,
     });
   };
 
@@ -624,7 +748,11 @@ export function VehicleConfigurator({
             Review build <ArrowRight aria-hidden="true" />
           </button>
         </div>
-        <p>Includes {usd.format(result.price.destination)} estimated destination. Taxes and eligibility vary.</p>
+        <p>
+          Includes {usd.format(result.price.destination)}{" "}
+          {result.price.confidence.destination === "verified" ? "" : "estimated "}
+          destination. Taxes and eligibility vary.
+        </p>
       </footer>
     </section>
   );

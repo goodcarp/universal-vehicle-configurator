@@ -825,15 +825,15 @@
     {
       "id": "destination",
       "label": "Destination & delivery",
-      "amount": 1800,
-      "confidence": "estimated",
-      "note": "R2 destination fee unpublished as of data_as_of; figure mirrors Rivian R1 practice. Verify at order.",
+      "amount": 1495,
+      "confidence": "verified",
+      "note": "Published on Rivian's own R2 build summary as Destination fee $1,495 (retrieved 2026-09-02), replacing the earlier R1-derived $1,800 estimate.",
       "provenance": {
         "sourceIds": [
-          "riviantrackr_r2_guide_2026_08_01"
+          "rivian_r2_configurator_2026_09_02"
         ],
-        "confidence": "estimated",
-        "note": "R2 destination fee unpublished as of data_as_of; figure mirrors Rivian R1 practice. Verify at order."
+        "confidence": "verified",
+        "note": "Published on Rivian's own R2 build summary as Destination fee $1,495 (retrieved 2026-09-02), replacing the earlier R1-derived $1,800 estimate."
       }
     }
   ],
@@ -1298,6 +1298,14 @@
       "publishedAt": "2024-01-01",
       "retrievedAt": "2026-08-31",
       "asOf": "2026-08-31"
+    },
+    {
+      "id": "rivian_r2_configurator_2026_09_02",
+      "title": "Design Your Rivian R2 — official configurator, build summary",
+      "url": "https://rivian.com/configurations/builder/r2",
+      "publishedAt": "2026-09-02",
+      "retrievedAt": "2026-09-02",
+      "asOf": "2026-09-02"
     }
   ],
   "ownership_setup": [

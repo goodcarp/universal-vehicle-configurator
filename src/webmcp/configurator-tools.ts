@@ -6,9 +6,17 @@ import type {
   CatalogGroup,
   SelectionPatch,
 } from "../domain/catalog.types";
+import { crossCompare, DEFAULT_COMPARISON_KEYS } from "../domain/compare";
+import {
+  estimateOwnership,
+  OwnershipAssumptionError,
+  validateOwnershipAssumptions,
+} from "../domain/ownership";
+import { resolveAtomicPatch } from "../domain/resolve";
 import {
   configuratorMutations,
   configuratorStore,
+  encodeShareState,
   type ConfiguratorStore,
   type ConfiguratorStoreState,
   type ConfigurationStage,
@@ -24,6 +32,8 @@ export const CONFIGURATOR_TOOL_NAMES = [
   "undo_vehicle_configuration_transaction",
   "present_vehicle_configuration",
   "set_vehicle_buyer_context",
+  "estimate_vehicle_ownership_cost",
+  "compare_vehicle_configurations",
 ] as const;
 
 export type ConfiguratorToolName = (typeof CONFIGURATOR_TOOL_NAMES)[number];
@@ -116,6 +126,56 @@ export const configuratorPresentation = defaultDependencies.presentation;
 
 let registration: Promise<ConfiguratorSiteToolsStatus> | undefined;
 let registrationController: AbortController | undefined;
+
+/**
+ * Hosts differ on where they expose the API, and some inject it after first
+ * paint. Look on both surfaces every time rather than caching a miss.
+ */
+function findModelContext(): ModelContextApi | undefined {
+  if (typeof document !== "undefined" && document.modelContext) {
+    return document.modelContext;
+  }
+  if (typeof navigator !== "undefined" && navigator.modelContext) {
+    return navigator.modelContext;
+  }
+  return undefined;
+}
+
+const LATE_INJECTION_POLL_MS = 400;
+const LATE_INJECTION_WINDOW_MS = 12_000;
+const MODEL_CONTEXT_EVENTS = ["modelcontext", "modelcontextchange"] as const;
+
+type SiteToolsListener = (status: ConfiguratorSiteToolsStatus) => void;
+
+const statusListeners = new Set<SiteToolsListener>();
+let currentStatus: ConfiguratorSiteToolsStatus = {
+  state: "registering",
+  toolNames: [],
+};
+
+export function getConfiguratorSiteToolsStatus(): ConfiguratorSiteToolsStatus {
+  return currentStatus;
+}
+
+/**
+ * Subscribe to registration status. Fires immediately with the current status
+ * so a late host connection can flip the UI out of "Manual mode" live.
+ */
+export function observeConfiguratorSiteTools(
+  listener: SiteToolsListener,
+): () => void {
+  statusListeners.add(listener);
+  listener(currentStatus);
+  return () => {
+    statusListeners.delete(listener);
+  };
+}
+
+function publishStatus(status: ConfiguratorSiteToolsStatus) {
+  currentStatus = status;
+  setDocumentStatus(status);
+  for (const listener of [...statusListeners]) listener(status);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -307,6 +367,56 @@ function parseBuyerContextPatch(value: unknown, toolName: string): BuyerContextI
   return parsed;
 }
 
+/**
+ * Resolve the catalog's source ids into full records so an agent can cite a
+ * claim rather than quote an opaque id like "colorado_imvc_2026".
+ */
+function resolveSources(catalog: Catalog, ids: readonly string[]) {
+  return ids
+    .map((id) => catalog.sources.find((source) => source.id === id))
+    .filter((source): source is Catalog["sources"][number] => source !== undefined)
+    .map((source) => ({
+      id: source.id,
+      title: source.title,
+      url: source.url,
+      publishedAt: source.publishedAt,
+      retrievedAt: source.retrievedAt,
+      asOf: source.asOf,
+    }));
+}
+
+/** Attach resolved sources to every incentive outcome, in every bucket. */
+function citeIncentives(
+  catalog: Catalog,
+  incentives: ConfiguratorStoreState["resolved"]["incentives"],
+) {
+  const cite = <T extends { sourceIds: readonly string[] }>(outcome: T) => ({
+    ...outcome,
+    sources: resolveSources(catalog, outcome.sourceIds),
+  });
+  return {
+    ...incentives,
+    encodedPredicatesMatched: incentives.encodedPredicatesMatched.map(cite),
+    potentiallyApplicable: incentives.potentiallyApplicable.map(cite),
+    expired: incentives.expired.map(cite),
+    ineligible: incentives.ineligible.map(cite),
+  };
+}
+
+/**
+ * The address bar already carries a deterministic permalink of the build, so an
+ * agent that just configured a vehicle can hand the link straight back.
+ */
+function shareUrlFor(state: ConfiguratorStoreState): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const query = encodeShareState(state.catalog, state.domain);
+    return new URL(query, window.location.href).toString();
+  } catch {
+    return null;
+  }
+}
+
 function compactConfiguration(state: ConfiguratorStoreState) {
   const selected = new Set(state.resolved.selectedOptionIds);
   return {
@@ -319,6 +429,9 @@ function compactConfiguration(state: ConfiguratorStoreState) {
       market: state.catalog.product.market,
       currency: state.catalog.product.currency ?? "USD",
       dataAsOf: state.catalog.product.data_as_of,
+      assembly: state.catalog.product.assembly ?? null,
+      disclaimer: state.catalog.product.disclaimer ?? null,
+      sources: resolveSources(state.catalog, state.catalog.product.sources ?? []),
     },
     configuration: {
       valid: state.resolved.valid,
@@ -334,10 +447,11 @@ function compactConfiguration(state: ConfiguratorStoreState) {
       price: state.resolved.price,
       specs: { ...state.resolved.specs },
       delivery: state.resolved.delivery,
-      incentives: state.resolved.incentives,
+      incentives: citeIncentives(state.catalog, state.resolved.incentives),
       violations: [...state.resolved.violations],
     },
     buyerContext: cloneBuyerContext(state.domain.buyerContext),
+    shareUrl: shareUrlFor(state),
   };
 }
 
@@ -820,10 +934,266 @@ export function createConfiguratorToolDefinitions(
       return {
         ...result,
         buyerContext: cloneBuyerContext(next.domain.buyerContext),
-        incentives: next.resolved.incentives,
+        incentives: citeIncentives(next.catalog, next.resolved.incentives),
       };
     },
   };
+
+  const estimateOwnershipCost: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[8],
+    title: "Estimate vehicle ownership cost",
+    description:
+      "Estimate monthly payment, sales tax, loan principal, energy, maintenance, and a multi-year ownership total for the current build. Read-only, so several financing scenarios can be priced without changing the build. Every assumption is optional and falls back to a catalog-derived default; the response names which defaults were used. Conditional credits and deductions are never netted into the payment.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        expectedRevision: expectedRevisionSchema,
+        assumptions: {
+          type: "object",
+          properties: {
+            aprPct: {
+              type: "number",
+              minimum: 0,
+              maximum: 30,
+              description: "Annual percentage rate, expressed in percent (6.5 = 6.5%).",
+            },
+            termMonths: {
+              type: "integer",
+              minimum: 12,
+              maximum: 96,
+              description: "Loan term in months.",
+            },
+            downPayment: {
+              type: "number",
+              minimum: 0,
+              description: "Cash down in USD. Cannot exceed the vehicle total.",
+            },
+            salesTaxRate: {
+              type: "number",
+              minimum: 0,
+              maximum: 0.2,
+              description: "Fraction, not percent. 0.08 means 8%.",
+            },
+            annualMiles: {
+              type: "number",
+              minimum: 0,
+              maximum: 50_000,
+              description: "Miles driven per year.",
+            },
+            homeKwhRate: {
+              type: "number",
+              minimum: 0,
+              maximum: 2,
+              description: "Home electricity price in USD per kWh.",
+            },
+            publicKwhRate: {
+              type: "number",
+              minimum: 0,
+              maximum: 2,
+              description: "Public charging price in USD per kWh.",
+            },
+            homeChargingShare: {
+              type: "number",
+              minimum: 0,
+              maximum: 1,
+              description: "Fraction of charging done at home. 0.8 means 80%.",
+            },
+            horizonYears: {
+              type: "integer",
+              minimum: 1,
+              maximum: 10,
+              description: "Ownership horizon used for the running total.",
+            },
+          },
+          minProperties: 1,
+          additionalProperties: false,
+        },
+      },
+      required: ["expectedRevision"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+    execute: (input, options) => {
+      throwIfAborted(options?.signal);
+      const toolName = CONFIGURATOR_TOOL_NAMES[8];
+      const record = assertRecord(input, toolName);
+      assertOnlyKeys(record, ["expectedRevision", "assumptions"], toolName);
+
+      const stored = store.getState().session.ownershipAssumptions;
+      const overrides =
+        record.assumptions === undefined
+          ? {}
+          : assertRecord(record.assumptions, toolName);
+      const allowed = Object.keys(stored);
+      assertOnlyKeys(overrides, allowed, toolName);
+
+      const merged = { ...stored };
+      const overridden: string[] = [];
+      for (const key of allowed) {
+        const value = overrides[key];
+        if (value === undefined) continue;
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          throw new TypeError(`${toolName} expects ${key} to be a finite number.`);
+        }
+        merged[key as keyof typeof merged] = value;
+        overridden.push(key);
+      }
+
+      // Priced without touching the store, so an agent can quote three
+      // scenarios without mutating the build the person is looking at.
+      const expectedRevision = parseExpectedRevision(record.expectedRevision, toolName);
+      const current = store.getState();
+      if (current.domain.revision !== expectedRevision) {
+        return {
+          ok: false as const,
+          error: {
+            code: "REVISION_CONFLICT" as const,
+            message: `Build moved to revision ${current.domain.revision}. Re-read the configuration and retry.`,
+            currentRevision: current.domain.revision,
+          },
+        };
+      }
+
+      const issues = validateOwnershipAssumptions(
+        merged,
+        current.resolved.price.vehicleTotal,
+      );
+      if (issues.length > 0) {
+        return {
+          ok: false as const,
+          error: {
+            code: "INVALID_INPUT" as const,
+            message: issues.join("; "),
+            currentRevision: current.domain.revision,
+          },
+        };
+      }
+
+      try {
+        const estimate = estimateOwnership(current.catalog, current.resolved, merged);
+        return {
+          ok: true as const,
+          domainRevision: current.domain.revision,
+          snapshot: {
+            id: `estimate-${current.domain.revision}`,
+            revision: current.domain.revision,
+            assumptions: merged,
+            result: estimate,
+          },
+          overriddenAssumptions: overridden,
+          defaultsUsed: allowed.filter((key) => !overridden.includes(key)),
+        };
+      } catch (error) {
+        return {
+          ok: false as const,
+          error: {
+            code: "INVALID_INPUT" as const,
+            message:
+              error instanceof OwnershipAssumptionError
+                ? error.issues.join("; ")
+                : errorMessage(error),
+            currentRevision: current.domain.revision,
+          },
+        };
+      }
+    },
+  };
+
+  const compareConfigurations: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[9],
+    title: "Compare vehicle configurations",
+    description:
+      "Compare the current build against up to three alternatives side by side on price, range, power, 0-60, matched savings, and delivery. Each alternative is a patch applied to the current build. Read-only: nothing is applied. Invalid alternatives are still returned, marked invalid with their violations, so a trade-off can be explained rather than hidden.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        candidates: {
+          type: "array",
+          minItems: 1,
+          maxItems: 3,
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", minLength: 1, maxLength: 60 },
+              patch: patchSchema(store.getState().catalog),
+            },
+            required: ["label", "patch"],
+            additionalProperties: false,
+          },
+        },
+        includeCurrent: {
+          type: "boolean",
+          description: "Include the current build as the first column. Defaults to true.",
+        },
+      },
+      required: ["candidates"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+    execute: (input, options) => {
+      throwIfAborted(options?.signal);
+      const toolName = CONFIGURATOR_TOOL_NAMES[9];
+      const record = assertRecord(input, toolName);
+      assertOnlyKeys(record, ["candidates", "includeCurrent"], toolName);
+
+      if (!Array.isArray(record.candidates) || record.candidates.length < 1) {
+        throw new TypeError(`${toolName} requires between one and three candidates.`);
+      }
+      if (record.candidates.length > 3) {
+        throw new TypeError(`${toolName} accepts at most three candidates.`);
+      }
+      const includeCurrent = record.includeCurrent ?? true;
+      if (typeof includeCurrent !== "boolean") {
+        throw new TypeError(`${toolName} expects includeCurrent to be a boolean.`);
+      }
+
+      const state = store.getState();
+      const base = state.resolved;
+      const buyer = state.domain.buyerContext;
+
+      const columns: Array<{ label: string; result: typeof base; valid: boolean; violations: unknown[] }> = [];
+      if (includeCurrent) {
+        columns.push({ label: "Current build", result: base, valid: base.valid, violations: [...base.violations] });
+      }
+
+      for (const raw of record.candidates) {
+        const candidate = assertRecord(raw, toolName);
+        assertOnlyKeys(candidate, ["label", "patch"], toolName);
+        if (typeof candidate.label !== "string" || candidate.label.length < 1) {
+          throw new TypeError(`${toolName} requires a label for every candidate.`);
+        }
+        const patch = parsePatch(candidate.patch, state.catalog, toolName);
+        const resolution = resolveAtomicPatch(state.catalog, base.selections, patch, buyer);
+        columns.push({
+          label: candidate.label,
+          result: resolution.candidate,
+          valid: resolution.candidate.valid,
+          violations: [...resolution.candidate.violations],
+        });
+      }
+
+      const comparison = crossCompare(
+        columns.map((column) => column.result),
+        columns.map((column) => column.label),
+        DEFAULT_COMPARISON_KEYS,
+      );
+
+      return {
+        ok: true,
+        revision: state.domain.revision,
+        keys: [...DEFAULT_COMPARISON_KEYS],
+        labels: comparison.labels,
+        table: comparison.table,
+        columns: columns.map((column) => ({
+          label: column.label,
+          valid: column.valid,
+          violations: column.violations,
+          selections: cloneSelections(column.result.selections),
+        })),
+      };
+    },
+  };
+
 
   return [
     getConfiguration,
@@ -834,21 +1204,16 @@ export function createConfiguratorToolDefinitions(
     undoTransaction,
     presentConfiguration,
     setBuyerContext,
+    estimateOwnershipCost,
+    compareConfigurations,
   ];
 }
 
-async function register(
+async function registerTools(
   dependencies: ConfiguratorToolsDependencies,
+  modelContext: ModelContextApi,
 ): Promise<ConfiguratorSiteToolsStatus> {
-  const modelContext = document.modelContext;
-  if (window.top !== window || typeof modelContext?.registerTool !== "function") {
-    const status = { state: "unsupported", toolNames: [] } as const;
-    setDocumentStatus(status);
-    return status;
-  }
-
-  const registering = { state: "registering", toolNames: [] } as const;
-  setDocumentStatus(registering);
+  publishStatus({ state: "registering", toolNames: [] });
   const controller = new AbortController();
   registrationController = controller;
   const registeredToolNames: ConfiguratorToolName[] = [];
@@ -862,7 +1227,7 @@ async function register(
       state: "ready",
       toolNames: [...registeredToolNames],
     } as const;
-    setDocumentStatus(status);
+    publishStatus(status);
     return status;
   } catch (error) {
     controller.abort();
@@ -872,9 +1237,71 @@ async function register(
       toolNames: [...registeredToolNames],
       message: errorMessage(error),
     } as const;
-    setDocumentStatus(status);
+    publishStatus(status);
     return status;
   }
+}
+
+/**
+ * Wait for a host that injects the API after first paint. Resolves as soon as
+ * the API appears, or gives up after LATE_INJECTION_WINDOW_MS.
+ */
+function waitForModelContext(): Promise<ModelContextApi | undefined> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (api: ModelContextApi | undefined) => {
+      if (settled) return;
+      settled = true;
+      window.clearInterval(poll);
+      window.clearTimeout(deadline);
+      for (const event of MODEL_CONTEXT_EVENTS) {
+        document.removeEventListener(event, onEvent);
+        window.removeEventListener(event, onEvent);
+      }
+      resolve(api);
+    };
+    const onEvent = () => {
+      const api = findModelContext();
+      if (api) finish(api);
+    };
+    const poll = window.setInterval(onEvent, LATE_INJECTION_POLL_MS);
+    const deadline = window.setTimeout(
+      () => finish(undefined),
+      LATE_INJECTION_WINDOW_MS,
+    );
+    for (const event of MODEL_CONTEXT_EVENTS) {
+      document.addEventListener(event, onEvent);
+      window.addEventListener(event, onEvent);
+    }
+  });
+}
+
+async function register(
+  dependencies: ConfiguratorToolsDependencies,
+): Promise<ConfiguratorSiteToolsStatus> {
+  if (window.top !== window) {
+    const status = { state: "unsupported", toolNames: [] } as const;
+    publishStatus(status);
+    return status;
+  }
+
+  const immediate = findModelContext();
+  if (immediate) return registerTools(dependencies, immediate);
+
+  // No API yet. Resolve as manual mode now so the UI paints, but keep watching
+  // and upgrade in place through observeConfiguratorSiteTools if a host
+  // injects the API after first paint.
+  const status = { state: "unsupported", toolNames: [] } as const;
+  publishStatus(status);
+  void waitForModelContext().then((late) => {
+    if (late) {
+      registration = registerTools(dependencies, late);
+      return;
+    }
+    // Give up watching, but clear the memo so a later caller can retry.
+    registration = undefined;
+  });
+  return status;
 }
 
 export function registerConfiguratorSiteTools(
@@ -888,6 +1315,7 @@ export function unregisterConfiguratorSiteTools() {
   registrationController?.abort();
   registrationController = undefined;
   registration = undefined;
+  currentStatus = { state: "registering", toolNames: [] };
 }
 
 export function resetConfiguratorSiteToolsForTests() {

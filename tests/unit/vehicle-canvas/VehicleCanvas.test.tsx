@@ -88,7 +88,7 @@ describe("VehicleCanvas", () => {
     expect(canvas).toHaveAttribute("data-preset", "interior");
     expect(screen.getByRole("button", { name: "Interior" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByLabelText("Black Crater representative interior material preview")).toBeVisible();
-    expect(screen.getByText("Material preview only · cabin geometry not modeled")).toBeVisible();
+    expect(screen.getByText("Representative cabin · not a manufacturer interior")).toBeVisible();
 
     rerender(
       <VehicleCanvas

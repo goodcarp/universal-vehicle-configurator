@@ -33,9 +33,9 @@ describe("the six archived resolver assertions", () => {
   );
 
   it("preserves the original $61,290 scenario while removing charger setup from vehicle price", () => {
-    expect(performance.price.vehicleTotal).toBe(57_990 + 1_800);
+    expect(performance.price.vehicleTotal).toBe(57_990 + 1_495);
     expect(performance.price.ownershipSetup).toBe(1_500);
-    expect(performance.price.illustrativeOwnershipTotal).toBe(57_990 + 1_800 + 1_500);
+    expect(performance.price.illustrativeOwnershipTotal).toBe(57_990 + 1_495 + 1_500);
   });
 
   it("preserves the published Performance wheel override", () => {

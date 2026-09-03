@@ -9,6 +9,7 @@ import type {
   SelectionPatch,
 } from "../../../src/domain/catalog.types";
 import { resolve } from "../../../src/domain/resolve";
+import { readableCompatibilityReason } from "../../../src/features/configurator/compatibility-copy";
 import {
   VehicleConfigurator,
   type SelectionChangeMeta,
@@ -97,7 +98,7 @@ describe("VehicleConfigurator", () => {
     expect(screen.getByRole("checkbox", { name: /hitch \+ tow software/i })).toBeChecked();
 
     const summary = screen.getByRole("contentinfo", { name: "Current build summary" });
-    expect(within(summary).getByText("$62,240")).toBeVisible();
+    expect(within(summary).getByText("$61,935")).toBeVisible();
     expect(within(summary).getByText("307 mi estimated range")).toBeVisible();
     expect(within(summary).getByText("Late 2026")).toBeVisible();
   });
@@ -106,21 +107,21 @@ describe("VehicleConfigurator", () => {
     render(<ConfiguratorHarness />);
 
     const summary = screen.getByRole("contentinfo", { name: "Current build summary" });
-    expect(within(summary).getByText("$59,790")).toBeVisible();
+    expect(within(summary).getByText("$59,485")).toBeVisible();
     expect(within(summary).getByText("330 mi estimated range")).toBeVisible();
     expect(within(summary).getByText("Available now")).toBeVisible();
 
     fireEvent.click(screen.getByRole("radio", { name: /20.*Black Sand All-Terrain/i }));
-    expect(within(summary).getByText("$60,790")).toBeVisible();
+    expect(within(summary).getByText("$60,485")).toBeVisible();
     expect(within(summary).getByText("307 mi estimated range")).toBeVisible();
 
     fireEvent.click(screen.getByRole("radio", { name: /Forest Green/i }));
-    expect(within(summary).getByText("$61,790")).toBeVisible();
+    expect(within(summary).getByText("$61,485")).toBeVisible();
     expect(within(summary).getByText("Late 2026")).toBeVisible();
     expect(screen.getByText("Timing changed")).toBeVisible();
   });
 
-  it("keeps an incompatible choice atomic, explains it, and offers valid paired paths", () => {
+  it("resolves an incompatible choice in one click instead of bouncing the buyer", () => {
     const onInvalidSelection = vi.fn();
     const onSelectionPatch = vi.fn();
 
@@ -141,19 +142,17 @@ describe("VehicleConfigurator", () => {
     }
 
     render(<InvalidHarness />);
+    // Standard RWD is invalid with the default 21" wheels. The buyer should not
+    // be sent back up the rail to make a second, different decision.
     fireEvent.click(screen.getByRole("radio", { name: /R2 Standard RWD, From/i }));
 
-    const guide = screen.getByRole("alert", { name: "Compatibility guidance" });
-    expect(within(guide).getByText(/needs a companion change/i)).toBeVisible();
-    expect(within(guide).getByText(/not available with this build/i)).toBeVisible();
-    expect(screen.getByRole("radio", { name: /Performance/i })).toBeChecked();
-    expect(onInvalidSelection).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("alert", { name: "Compatibility guidance" })).not.toBeInTheDocument();
+    expect(onInvalidSelection).not.toHaveBeenCalled();
 
-    fireEvent.click(within(guide).getByRole("button", { name: /19.*Machined Graphite/i }));
     expect(screen.getByRole("radio", { name: /R2 Standard RWD, From/i })).toBeChecked();
     expect(screen.getByRole("radio", { name: /19.*Machined Graphite/i })).toBeChecked();
     expect(screen.getByText("275 mi estimated range")).toBeVisible();
-    expect(screen.queryByRole("alert", { name: "Compatibility guidance" })).not.toBeInTheDocument();
+
     expect(onSelectionPatch).toHaveBeenCalledWith(
       {
         set: {
@@ -165,26 +164,37 @@ describe("VehicleConfigurator", () => {
         source: "compatible-alternative",
         changedGroups: ["build", "wheels"],
         primaryGroup: "build",
+        companionChanges: ['19" Machined Graphite All-Season'],
       }),
     );
   });
 
-  it("retires stale compatibility advice after an external agent changes the build", () => {
+  it("resolves against the build an external agent just set, not a stale one", () => {
     const defaults = resolve(catalog).selections;
+    const onSelectionPatch = vi.fn();
     const props = {
       catalog,
       buyerContext: {},
-      onSelectionPatch: vi.fn(),
+      onSelectionPatch,
       onBuyerContextChange: vi.fn(),
     };
     const view = render(<VehicleConfigurator {...props} selections={defaults} />);
 
-    fireEvent.click(screen.getByRole("radio", { name: /R2 Standard RWD, From/i }));
-    expect(screen.getByRole("alert", { name: "Compatibility guidance" })).toBeVisible();
-
+    // An agent moves the build underneath the person.
     const agentSelections = resolve(catalog, { wheels: "wheels.bs20_at" }).selections;
     view.rerender(<VehicleConfigurator {...props} selections={agentSelections} />);
     expect(screen.queryByRole("alert", { name: "Compatibility guidance" })).not.toBeInTheDocument();
+
+    // The companion change must be computed from the agent's build.
+    fireEvent.click(screen.getByRole("radio", { name: /R2 Standard RWD, From/i }));
+    const [patch, meta] = onSelectionPatch.mock.calls.at(-1) ?? [];
+    expect(patch.set.build).toEqual(["build.standard_rwd"]);
+    expect(meta.candidate.valid).toBe(true);
+    // All-terrain wheels are already compatible with Standard RWD, so nothing
+    // else has to move. Resolving against the stale default build would have
+    // forced a needless wheel swap.
+    expect(meta.changedGroups).toEqual(["build"]);
+    expect(meta.candidate.selections.wheels).toEqual(["wheels.bs20_at"]);
   });
 
   it("emits resolved selection metadata and buyer-context patches", () => {
@@ -218,10 +228,43 @@ describe("VehicleConfigurator", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Tesla Model Y/i }));
     expect(onBuyerContextChange).toHaveBeenCalledWith({ crossShopIds: ["model_y"] });
 
-    fireEvent.click(screen.getByRole("button", { name: /Review \$59,790 R2 build/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Review \$59,485 R2 build/i }));
     expect(onReviewBuild).toHaveBeenCalledWith(expect.objectContaining({
       valid: true,
-      price: expect.objectContaining({ vehicleTotal: 59_790 }),
+      price: expect.objectContaining({ vehicleTotal: 59_485 }),
     }));
+  });
+});
+
+describe("compatibility guidance wording", () => {
+  it("does not tell the buyer an option pairs with the build it conflicts with", () => {
+    // towing.standalone is gated by {not: {selected: build.performance}}, which
+    // renders as "requires NOT(requires option 'build.performance')". Scraping
+    // that string without honouring the NOT reported the blocking build as a
+    // required pairing, the exact inverse of the truth.
+    const negated = readableCompatibilityReason(
+      {
+        rule: "option.unavailable",
+        severity: "error",
+        message:
+          "'Tow Package (hitch + tow software)' is not available with this build: requires NOT(requires option 'build.performance')",
+      },
+      catalog,
+    );
+    expect(negated).toMatch(/cannot be combined with/i);
+    expect(negated).toMatch(/Performance/);
+    expect(negated).not.toMatch(/pairs with/i);
+
+    // A positive requirement still reads as a pairing.
+    const positive = readableCompatibilityReason(
+      {
+        rule: "option.unavailable",
+        severity: "error",
+        message: "'19\" Machined Graphite All-Season' is not available with this build: requires option 'build.standard_rwd'",
+      },
+      catalog,
+    );
+    expect(positive).toMatch(/pairs with/i);
+    expect(positive).not.toMatch(/cannot be combined/i);
   });
 });

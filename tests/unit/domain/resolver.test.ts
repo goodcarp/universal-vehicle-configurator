@@ -90,7 +90,9 @@ describe("deterministic catalog resolution", () => {
 
     expect(result.specConfidence.range_mi).toBe("verified");
     expect(result.price.lines.find((line) => line.id === "wheels.bs20_at")?.confidence).toBe("estimated");
-    expect(result.price.confidence.destination).toBe("estimated");
+    // Destination is sourced from Rivian's own build summary, so it is the one
+    // fee that carries verified confidence; the option price beside it is not.
+    expect(result.price.confidence.destination).toBe("verified");
     expect(result.price.confidence.ownershipSetup).toBe("estimated");
     expect(result.delivery?.confidence).toBe("verified");
   });

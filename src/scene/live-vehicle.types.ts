@@ -15,10 +15,18 @@ export type LiveVehicleAccessories = Readonly<{
   towHitch: boolean;
 }>;
 
+export type LiveVehicleInterior = Readonly<{
+  color: string;
+  accentColor?: string;
+  material?: "textile" | "vegan-leather" | "leather";
+  tone?: "light" | "dark";
+}>;
+
 export type LiveVehicleViewportProps = Readonly<{
   paint: LiveVehiclePaint;
   wheel: LiveVehicleWheel;
   accessories: LiveVehicleAccessories;
+  interior: LiveVehicleInterior;
   mode: LiveVehicleRenderMode;
   viewPreset: LiveVehicleViewPreset;
   focus: LiveVehicleFocus;

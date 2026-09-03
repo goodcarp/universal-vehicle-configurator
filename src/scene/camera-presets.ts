@@ -27,11 +27,18 @@ const POSES: Record<LiveVehicleViewPreset, CameraPose> = {
     minDistance: 2.1,
     maxDistance: 5.5,
   },
+  // No cabin geometry exists, so this frames the greenhouse from outside
+  // rather than jamming the camera into the door.
+  // Inside the cabin, over the driver's left shoulder, looking at the dash and
+  // the portrait screen. The GLB's own eyepoint marker sits at y 1.378.
+  // Between the front seats at eye height, looking over the dash at the
+  // portrait screen, with the steering wheel to the left. Orbit from here
+  // sweeps the whole cabin.
   interior: {
-    position: [2.15, 1.72, 3.85],
-    target: [0.25, 1.08, 0.38],
-    minDistance: 3.25,
-    maxDistance: 7.4,
+    position: [-0.95, 1.33, -0.12],
+    target: [0.72, 0.86, -0.04],
+    minDistance: 0.6,
+    maxDistance: 3.1,
   },
 };
 

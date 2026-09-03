@@ -415,3 +415,168 @@ describe("real configurator Site Tools", () => {
     ).toThrow("unsupported field: extra");
   });
 });
+
+describe("ownership cost tool", () => {
+  afterEach(() => {
+    delete document.modelContext;
+    delete document.documentElement.dataset.siteTools;
+    resetConfiguratorSiteToolsForTests();
+  });
+
+  it("estimates from catalog defaults when the agent supplies no assumptions", async () => {
+    const dependencies = setup();
+    const tool = toolsByName(dependencies).get("estimate_vehicle_ownership_cost");
+    expect(tool).toBeDefined();
+
+    const revision = dependencies.store.getState().domain.revision;
+    const result = (await tool!.execute({ expectedRevision: revision }, {})) as {
+      ok: boolean;
+      snapshot: { result: { monthlyPayment: number; ownershipTotal: number; note: string } };
+      overriddenAssumptions: string[];
+      defaultsUsed: string[];
+    };
+
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.result.monthlyPayment).toBeGreaterThan(0);
+    expect(result.snapshot.result.ownershipTotal).toBeGreaterThan(0);
+    expect(result.overriddenAssumptions).toEqual([]);
+    expect(result.defaultsUsed).toContain("aprPct");
+    // Conditional credits must never be netted into the payment.
+    expect(result.snapshot.result.note).toMatch(/not netted/iu);
+  });
+
+  it("merges only the assumptions the agent actually supplied", async () => {
+    const dependencies = setup();
+    const tool = toolsByName(dependencies).get("estimate_vehicle_ownership_cost");
+    const revision = dependencies.store.getState().domain.revision;
+
+    const result = (await tool!.execute(
+      { expectedRevision: revision, assumptions: { aprPct: 0, termMonths: 60 } },
+      {},
+    )) as {
+      ok: boolean;
+      snapshot: { result: { assumptions: { aprPct: number; termMonths: number } } };
+      overriddenAssumptions: string[];
+    };
+
+    expect(result.ok).toBe(true);
+    expect(result.overriddenAssumptions).toEqual(["termMonths", "aprPct"].sort());
+    expect(result.snapshot.result.assumptions.aprPct).toBe(0);
+    expect(result.snapshot.result.assumptions.termMonths).toBe(60);
+  });
+
+  it("rejects unknown assumption fields instead of silently ignoring them", async () => {
+    const dependencies = setup();
+    const tool = toolsByName(dependencies).get("estimate_vehicle_ownership_cost");
+    const revision = dependencies.store.getState().domain.revision;
+
+    expect(() =>
+      tool!.execute(
+        { expectedRevision: revision, assumptions: { madeUpField: 3 } },
+        {},
+      ),
+    ).toThrow(/madeUpField/u);
+  });
+});
+
+describe("agent affordances", () => {
+  afterEach(() => {
+    delete document.modelContext;
+    delete document.documentElement.dataset.siteTools;
+    resetConfiguratorSiteToolsForTests();
+  });
+
+  it("resolves incentive source ids into citable records", async () => {
+    const dependencies = setup();
+    const tools = toolsByName(dependencies);
+    const revision = dependencies.store.getState().domain.revision;
+
+    await tools.get("set_vehicle_buyer_context")!.execute(
+      { expectedRevision: revision, patch: { state: "CO" } },
+      {},
+    );
+
+    const state = (await tools.get("get_vehicle_configuration")!.execute({}, {})) as {
+      catalog: { assembly: unknown; disclaimer: string | null; sources: Array<{ id: string; url: string }> };
+      configuration: {
+        incentives: {
+          encodedPredicatesMatched: Array<{ label: string; sources: Array<{ id: string; title: string; url: string }> }>;
+        };
+      };
+      shareUrl: string | null;
+    };
+
+    const co = state.configuration.incentives.encodedPredicatesMatched.find((i) =>
+      /Colorado Innovative/i.test(i.label),
+    );
+    expect(co).toBeDefined();
+    // An agent must be able to cite the claim, not just echo an opaque id.
+    expect(co!.sources.length).toBeGreaterThan(0);
+    expect(co!.sources[0].url).toMatch(/^https?:\/\//u);
+    expect(co!.sources[0].title.length).toBeGreaterThan(0);
+
+    // Product provenance the loan-interest deduction reasoning depends on.
+    expect(state.catalog.assembly).not.toBeNull();
+    expect(state.catalog.sources.length).toBeGreaterThan(0);
+    expect(state.shareUrl).toMatch(/build=/u);
+  });
+
+  it("compares alternatives without applying them", async () => {
+    const dependencies = setup();
+    const tools = toolsByName(dependencies);
+    const before = dependencies.store.getState().domain.revision;
+
+    const result = (await tools.get("compare_vehicle_configurations")!.execute(
+      {
+        candidates: [
+          { label: "Premium", patch: { set: { build: ["build.premium"] } } },
+          { label: "19-inch wheels", patch: { set: { wheels: ["wheels.mg19_as"] } } },
+        ],
+      },
+      {},
+    )) as {
+      ok: boolean;
+      labels: string[];
+      table: Record<string, unknown[]>;
+      columns: Array<{ label: string; valid: boolean; violations: unknown[] }>;
+    };
+
+    expect(result.ok).toBe(true);
+    expect(result.labels).toEqual(["Current build", "Premium", "19-inch wheels"]);
+    expect(result.table["price.vehicleTotal"]).toHaveLength(3);
+    expect(result.table["specs.range_mi"]).toHaveLength(3);
+
+    // The incompatible candidate is reported, not silently dropped.
+    const wheels = result.columns.find((c) => c.label === "19-inch wheels");
+    expect(wheels!.valid).toBe(false);
+    expect(wheels!.violations.length).toBeGreaterThan(0);
+
+    // Nothing was applied.
+    expect(dependencies.store.getState().domain.revision).toBe(before);
+  });
+
+  it("prices ownership without mutating the build", async () => {
+    const dependencies = setup();
+    const tools = toolsByName(dependencies);
+    const before = dependencies.store.getState();
+
+    const tool = tools.get("estimate_vehicle_ownership_cost")!;
+    expect(tool.annotations?.readOnlyHint).toBe(true);
+
+    const a = (await tool.execute(
+      { expectedRevision: before.domain.revision, assumptions: { aprPct: 3 } },
+      {},
+    )) as { ok: boolean; snapshot: { result: { monthlyPayment: number } } };
+    const b = (await tool.execute(
+      { expectedRevision: before.domain.revision, assumptions: { aprPct: 9 } },
+      {},
+    )) as { ok: boolean; snapshot: { result: { monthlyPayment: number } } };
+
+    expect(a.ok && b.ok).toBe(true);
+    expect(b.snapshot.result.monthlyPayment).toBeGreaterThan(a.snapshot.result.monthlyPayment);
+
+    const after = dependencies.store.getState();
+    expect(after.domain.revision).toBe(before.domain.revision);
+    expect(after.session.ownershipEstimate).toBe(before.session.ownershipEstimate);
+  });
+});

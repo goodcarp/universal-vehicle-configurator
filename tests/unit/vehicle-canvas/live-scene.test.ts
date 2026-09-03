@@ -38,7 +38,11 @@ describe("live vehicle scene", () => {
     expect(angle.position).not.toEqual(profile.position);
     expect(profile.position).not.toEqual(wheel.position);
     expect(interior.position).not.toEqual(angle.position);
-    expect(interior.target[1]).toBeGreaterThan(1);
+    // Interior is no longer a tighter exterior shot: the camera sits inside the
+    // cabin, so its entire dolly range is closer than the exterior views reach.
+    expect(interior.maxDistance).toBeLessThan(angle.minDistance);
+    expect(interior.position[1]).toBeGreaterThan(1);
+    expect(Math.abs(interior.position[0])).toBeLessThan(1.6);
     expect(wheel.target[0]).toBeGreaterThan(1);
     expect(wheel.maxDistance).toBeLessThan(profile.maxDistance);
     expect(Math.hypot(

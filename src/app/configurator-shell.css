@@ -93,6 +93,158 @@
   background: var(--acid);
 }
 
+.rail-activity {
+  flex: none;
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.9rem 0.9rem 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The tools chip is the only place a judge in a plain browser learns this is a
+   WebMCP entry, so it opens rather than just labelling. */
+.tool-status {
+  position: relative;
+}
+
+.tool-status > button [data-chevron] {
+  width: 0.7rem;
+  height: 0.7rem;
+  opacity: 0.55;
+}
+
+.tool-status__panel {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: min(23rem, calc(100vw - 2rem));
+  max-height: min(30rem, calc(100dvh - 6rem));
+  overflow-y: auto;
+  padding: 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 1.1rem;
+  background: var(--white);
+  box-shadow: var(--shadow-soft);
+  text-align: left;
+}
+
+.tool-status__lede {
+  margin: 0 0 0.7rem;
+  color: var(--ink-muted);
+  font-size: 0.65rem;
+  line-height: 1.5;
+}
+
+.tool-status__lede + .tool-status__prompts {
+  margin-top: 0;
+}
+
+.tool-status__tools,
+.tool-status__prompts,
+.tool-status__how {
+  margin: 0 0 0.85rem;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.tool-status__tools li {
+  display: grid;
+  gap: 0.1rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.tool-status__tools li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.tool-status__tools code {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--technical);
+  word-break: break-all;
+}
+
+.tool-status__tools small,
+.tool-status__how small {
+  color: var(--ink-muted);
+  font-size: 0.6rem;
+  line-height: 1.45;
+}
+
+.tool-status__prompts button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.65rem;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.tool-status__prompts button:hover,
+.tool-status__prompts button:focus-visible {
+  border-color: var(--technical);
+}
+
+.tool-status__prompts button svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: none;
+  color: var(--ink-muted);
+}
+
+.tool-status__prompts small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--technical);
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tool-status__how li {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+}
+
+.tool-status__how strong {
+  font-size: 0.66rem;
+}
+
+.tool-status__how code {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--technical);
+  word-break: break-all;
+}
+
 .configurator-workspace {
   height: calc(100dvh - 4.25rem);
   display: grid;
@@ -121,6 +273,8 @@
 .configurator-rail__inner {
   height: 100%;
   min-height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(16, 18, 16, 0.1);
   border-radius: 1.65rem;
@@ -130,6 +284,8 @@
 }
 
 .configurator-rail__inner > .uvc-configurator {
+  flex: 1;
+  min-height: 0;
   border-left: 0;
   border-radius: inherit;
   overflow: hidden;
@@ -161,12 +317,175 @@
   background: var(--technical);
 }
 
+/* Persistent receipt of what the agent just did. The toast is transient; this
+   stays until dismissed so the person can read which stages actually landed. */
+/* Lives in the rail, never over the model. The viewer is the product. */
+.agent-activity {
+  width: 100%;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(118, 221, 247, 0.3);
+  border-radius: 1.1rem;
+  color: #e8fbff;
+  background: rgba(4, 26, 36, 0.9);
+  box-shadow: 0 1rem 3rem rgba(14, 25, 20, 0.2);
+  backdrop-filter: blur(18px);
+  animation: configuration-change-in 320ms cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+
+.agent-activity[data-status="interrupted"] {
+  border-color: rgba(255, 214, 138, 0.42);
+}
+
+.agent-activity > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.agent-activity > header > svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: none;
+  margin-top: 0.1rem;
+  color: var(--acid);
+}
+
+.agent-activity[data-status="interrupted"] > header > svg {
+  color: #ffd68a;
+}
+
+.agent-activity > header > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.agent-activity > header strong {
+  display: block;
+  font-size: 0.74rem;
+}
+
+.agent-activity > header small {
+  display: block;
+  margin-top: 0.15rem;
+  color: rgba(224, 248, 252, 0.62);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.agent-activity > header button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(232, 251, 255, 0.09);
+  color: inherit;
+  cursor: pointer;
+}
+
+.agent-activity > header button svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.agent-activity__stages {
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.agent-activity__stages li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.66rem;
+}
+
+.agent-activity__stages svg {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: none;
+}
+
+.agent-activity__stages li[data-state="done"] svg {
+  color: var(--acid);
+}
+
+.agent-activity__stages li[data-state="skipped"] {
+  color: rgba(224, 248, 252, 0.45);
+}
+
+.agent-activity__stages li[data-state="skipped"] span {
+  text-decoration: line-through;
+}
+
+.agent-activity__stages li > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-activity__stages li > small {
+  flex: none;
+  color: rgba(224, 248, 252, 0.45);
+  font-family: var(--font-mono);
+  font-size: 0.48rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.agent-activity__reason,
+.agent-activity__delta {
+  margin: 0.6rem 0 0;
+  display: flex;
+  gap: 0.4rem;
+  color: rgba(224, 248, 252, 0.66);
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.agent-activity__delta span {
+  padding: 0.12rem 0.4rem;
+  border: 1px solid rgba(232, 251, 255, 0.2);
+  border-radius: 999px;
+}
+
+.agent-activity__undo {
+  width: 100%;
+  min-height: 2.3rem;
+  margin-top: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--acid);
+  color: #101210;
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 660;
+}
+
+.agent-activity__undo svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
 .configuration-change {
-  position: absolute;
-  z-index: 30;
-  left: 1.7rem;
-  top: 5.7rem;
-  width: min(23rem, calc(100% - 3.4rem));
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 0.7rem;
@@ -193,11 +512,19 @@
   gap: 0.2rem;
 }
 
-.configuration-change strong,
-.configuration-change span {
+.configuration-change strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* In the rail there is room to read the whole consequence, including any
+   companion change an auto-resolved pick had to make. */
+.configuration-change span {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .configuration-change strong {
@@ -423,6 +750,190 @@
 .review-sheet__math .review-sheet__total strong {
   font-size: 1.2rem;
   letter-spacing: -0.04em;
+}
+
+
+/* Incentive engine output. The four buckets mirror resolve.ts so the page
+   shows the same refusal-to-guess the agent tools return. */
+.incentives {
+  margin-top: 1.5rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.incentives__head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+}
+
+.incentives__head p {
+  margin: 0.3rem 0 0;
+  color: var(--ink-muted);
+  font-size: 0.63rem;
+  line-height: 1.5;
+}
+
+.incentives__bucket {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 0.75rem 0.85rem;
+  background: var(--white);
+}
+
+.incentives__bucket[data-tone="matched"] {
+  border-color: color-mix(in srgb, var(--technical) 45%, transparent);
+  background: color-mix(in srgb, var(--technical) 7%, var(--white));
+}
+
+.incentives__bucket[data-tone="expired"],
+.incentives__bucket[data-tone="ineligible"] {
+  background: #f4f3ee;
+}
+
+.incentives__bucket > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.incentives__bucket > header svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: none;
+  margin-top: 0.1rem;
+  color: var(--technical);
+}
+
+.incentives__bucket[data-tone="expired"] > header svg,
+.incentives__bucket[data-tone="ineligible"] > header svg {
+  color: var(--ink-muted);
+}
+
+.incentives__bucket > header strong {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 680;
+}
+
+.incentives__bucket > header small {
+  display: block;
+  margin-top: 0.1rem;
+  color: var(--ink-muted);
+  font-size: 0.58rem;
+  line-height: 1.4;
+}
+
+.incentives__bucket ul {
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.incentives__bucket li + li {
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
+}
+
+.incentives__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.incentives__label {
+  font-size: 0.7rem;
+  font-weight: 620;
+  line-height: 1.35;
+}
+
+.incentives__amount {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 680;
+}
+
+.incentives__bucket[data-tone="expired"] .incentives__amount,
+.incentives__bucket[data-tone="ineligible"] .incentives__amount {
+  color: var(--ink-muted);
+  text-decoration: line-through;
+}
+
+.incentives__why,
+.incentives__note {
+  margin: 0.25rem 0 0;
+  color: var(--ink-muted);
+  font-size: 0.61rem;
+  line-height: 1.45;
+}
+
+.incentives__note {
+  font-style: italic;
+}
+
+.incentives__meta {
+  margin: 0.35rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.53rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.incentives__meta > span,
+.incentives__meta > a {
+  padding: 0.12rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-muted);
+}
+
+.incentives__meta > a {
+  color: var(--technical);
+  text-decoration: none;
+}
+
+.incentives__meta > a:hover,
+.incentives__meta > a:focus-visible {
+  border-color: var(--technical);
+}
+
+.incentives__meta [data-confidence="verified"] {
+  color: var(--technical);
+  border-color: color-mix(in srgb, var(--technical) 40%, transparent);
+}
+
+.incentives__total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0;
+  padding: 0.6rem 0.85rem;
+  border-radius: 1rem;
+  background: #ecece5;
+  font-size: 0.63rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+}
+
+.incentives__total strong {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.review-sheet__disclaimer {
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--line);
 }
 
 .review-sheet > footer {

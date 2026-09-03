@@ -82,8 +82,10 @@ as a manufacturer-accurate Rivian R2.
   change, not a model swap.
 - Interior keeps the same exterior GLB visible and presents only a clearly
   labeled material preview; cabin geometry is not modeled.
-- If live rendering is unavailable, the configurator uses same-GLB browser
-  captures for its safety frames. No alternate procedural silhouette is mounted.
+- Same-GLB browser captures cover both the window before the GLB finishes
+  loading and the unsupported-WebGL, render-failure, and context-loss paths,
+  so the stage is never empty. The live layer fades in over them once the
+  renderer is healthy. No alternate procedural silhouette is mounted.
 - Human controls and Site Tools write to the same configuration and presentation
   state, so agent changes are reflected by the live scene.
 
