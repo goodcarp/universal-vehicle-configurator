@@ -6,9 +6,8 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   { ignores: ["dist", "node_modules", "reference", "public/garage"] },
   {
-    // Vendored verbatim from the R2 engineering drawing so the two trees stay
-    // diffable. Reformatting it to satisfy lint would break that, and the
-    // showroom layer next to it is linted normally.
+    // Generated from public/garage/src by scripts/sync-r2-model.mjs. Garage is
+    // the linted authoring surface; the Configure mirrors must stay byte-stable.
     ignores: ["src/scene/r2/geom.js", "src/scene/r2/vehicle.js"],
   },
   js.configs.recommended,

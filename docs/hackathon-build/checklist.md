@@ -31,8 +31,8 @@ Updated: 2026-09-03
 - [x] TypeScript passes.
 - [x] ESLint passes; the embedded Garage runtime is treated as a self-contained
   browser artifact and excluded from the host TypeScript lint target.
-- [x] Full suite passes: 108 tests.
-- [x] Focused integration suite passes: 26 tests.
+- [x] Full suite passes: 115 tests.
+- [x] Focused integration suite passes: 28 tests.
 - [x] Production build completes.
 - [x] Browser-confirm 16 host tools and 14 direct Garage tools.
 - [x] Browser-confirm the configured Performance R2 context reaches Garage and
@@ -40,6 +40,18 @@ Updated: 2026-09-03
 - [ ] Confirm touch orbit, reduced motion, and WebGL fallback on the deployed
   URL.
 - [ ] Record the final demo and capture submission screenshots.
+
+## Final hardening
+
+- [x] Make the Garage-authored procedural R2 the canonical geometry source and
+  automatically mirror/verify the Configure copy during development, testing,
+  and production builds.
+- [x] Audit all host and direct-Garage WebMCP tools, strengthen any weak
+  schemas, error handling, or state synchronization, and cover improvements
+  with automated tests.
+- [x] Verify and refine Configure and Garage at phone, tablet, narrow
+  split-pane/tray, laptop, and full-screen viewports without hiding core human
+  controls or agent-visible state.
 
 ## Rights and representation
 

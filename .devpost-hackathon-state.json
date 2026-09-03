@@ -40,7 +40,7 @@
   },
   "submission": {
     "draft_file": "devpost-submission.md",
-    "status": "not-started"
+    "status": "needs-work"
   },
   "next_command": "build-project"
 }

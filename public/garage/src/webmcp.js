@@ -17,9 +17,86 @@ const v3 = new THREE.Vector3();
 
 const round = (n, d = 4) => Math.round(n * 10 ** d) / 10 ** d;
 const xyz = (v) => ({ x: round(v.x), y: round(v.y), z: round(v.z) });
+const isRecord = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const READ_ONLY = Object.freeze({
+  readOnlyHint: true, destructiveHint: false, idempotentHint: true,
+  openWorldHint: false, untrustedContentHint: false,
+});
+const SAFE_SET = Object.freeze({
+  readOnlyHint: false, destructiveHint: false, idempotentHint: true,
+  openWorldHint: false, untrustedContentHint: false,
+});
+const SAFE_ACTION = Object.freeze({
+  readOnlyHint: false, destructiveHint: false, idempotentHint: false,
+  openWorldHint: false, untrustedContentHint: false,
+});
+
+function validateValue(value, schema, path) {
+  if (schema.anyOf) {
+    for (const candidate of schema.anyOf) {
+      try { validateValue(value, candidate, path); return; } catch { /* try the next shape */ }
+    }
+    const expected = schema.anyOf.map((candidate) => candidate.type).join(' or ');
+    throw new TypeError(`${path} must be ${expected}.`);
+  }
+  if (schema.enum && !schema.enum.includes(value)) {
+    throw new TypeError(`${path} must be one of: ${schema.enum.join(', ')}.`);
+  }
+  if (schema.type === 'object') {
+    if (!isRecord(value)) throw new TypeError(`${path} must be a JSON object.`);
+    const properties = schema.properties || {};
+    for (const required of schema.required || []) {
+      if (!(required in value)) throw new TypeError(`${path} requires ${required}.`);
+    }
+    if (schema.additionalProperties === false) {
+      const unexpected = Object.keys(value).filter((key) => !(key in properties));
+      if (unexpected.length) {
+        throw new TypeError(`${path} received unsupported field${unexpected.length === 1 ? '' : 's'}: ${unexpected.join(', ')}.`);
+      }
+    }
+    for (const [key, child] of Object.entries(properties)) {
+      if (value[key] !== undefined) validateValue(value[key], child, `${path}.${key}`);
+    }
+    return;
+  }
+  if (schema.type === 'string') {
+    if (typeof value !== 'string') throw new TypeError(`${path} must be a string.`);
+    if (schema.minLength !== undefined && value.trim().length < schema.minLength) {
+      throw new RangeError(`${path} must not be blank.`);
+    }
+    if (schema.maxLength !== undefined && value.length > schema.maxLength) {
+      throw new RangeError(`${path} must be at most ${schema.maxLength} characters.`);
+    }
+    return;
+  }
+  if (schema.type === 'number' || schema.type === 'integer') {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new TypeError(`${path} must be a finite ${schema.type}.`);
+    }
+    if (schema.type === 'integer' && !Number.isSafeInteger(value)) {
+      throw new TypeError(`${path} must be a safe integer.`);
+    }
+    if (schema.minimum !== undefined && value < schema.minimum) {
+      throw new RangeError(`${path} must be at least ${schema.minimum}.`);
+    }
+    if (schema.maximum !== undefined && value > schema.maximum) {
+      throw new RangeError(`${path} must be at most ${schema.maximum}.`);
+    }
+    return;
+  }
+  if (schema.type === 'boolean' && typeof value !== 'boolean') {
+    throw new TypeError(`${path} must be a boolean.`);
+  }
+  if (schema.type === 'null' && value !== null) {
+    throw new TypeError(`${path} must be null.`);
+  }
+}
 
 export function installWebMCP(ctx) {
   const { st, rig, vehicle, overlay, ui, setView, motion, config } = ctx;
+  let syncedContextRevision = null;
+  let syncedContextFingerprint = null;
 
   const partIds = () => vehicle.order.map((p) => p.name);
   const findPart = (name) => {
@@ -61,12 +138,15 @@ export function installWebMCP(ctx) {
   const TOOLS = [
     {
       name: 'get_state',
+      title: 'Get digital twin state',
       description: 'Current view preset, camera pose, which motions are running, and what is selected. Call this first to orient.',
-      inputSchema: { type: 'object', properties: {} },
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      annotations: READ_ONLY,
       run: () => ({
         camera: cameraState(),
         view: st.view,
         vehicle_context: { ...st.vehicleContext },
+        vehicle_context_synced: syncedContextRevision !== null,
         // `panels` reads the same way as the button and as set_motion: on = shell dissolved
         motions: { run: st.run, drive: st.drive, lights: st.lights, panels: !st.panels, explode: st.explodeOn, open: st.openOn },
         explode_progress: round(st.explode, 3), open_progress: round(st.open, 3),
@@ -78,29 +158,48 @@ export function installWebMCP(ctx) {
     },
     {
       name: 'set_vehicle_context',
+      title: 'Synchronize configured vehicle context',
       description: 'Synchronize the vehicle identity and selected build supplied by the AutoLab configurator. This does not change engineering geometry; it lets the owner guide and agent verify that both lifecycle surfaces refer to the same revision.',
       inputSchema: {
         type: 'object',
         required: ['build', 'paint', 'wheels', 'interior', 'rangeMiles', 'vehicleTotal', 'revision'],
         additionalProperties: false,
         properties: {
-          build: { type: 'string' }, paint: { type: 'string' }, wheels: { type: 'string' }, interior: { type: 'string' },
-          rangeMiles: { anyOf: [{ type: 'number' }, { type: 'null' }] }, vehicleTotal: { type: 'number' }, revision: { type: 'integer', minimum: 1 },
+          build: { type: 'string', minLength: 1, maxLength: 120 },
+          paint: { type: 'string', minLength: 1, maxLength: 120 },
+          wheels: { type: 'string', minLength: 1, maxLength: 120 },
+          interior: { type: 'string', minLength: 1, maxLength: 120 },
+          rangeMiles: { anyOf: [{ type: 'number', minimum: 0, maximum: 2000 }, { type: 'null' }] },
+          vehicleTotal: { type: 'number', minimum: 0, maximum: 10000000 },
+          revision: { type: 'integer', minimum: 1 },
         },
       },
+      annotations: SAFE_SET,
       run: (context) => {
-        const required = ['build', 'paint', 'wheels', 'interior', 'rangeMiles', 'vehicleTotal', 'revision'];
-        const unexpected = Object.keys(context || {}).filter((key) => !required.includes(key));
-        if (unexpected.length) throw new Error(`unsupported vehicle context: ${unexpected.join(', ')}`);
-        if (required.some((key) => !(key in (context || {})))) throw new Error('complete vehicle context is required');
+        const fingerprint = JSON.stringify(context);
+        if (syncedContextRevision !== null && context.revision < syncedContextRevision) {
+          throw new Error(`stale vehicle context revision ${context.revision}; Garage is already at revision ${syncedContextRevision}`);
+        }
+        if (
+          syncedContextRevision === context.revision
+          && syncedContextFingerprint !== null
+          && syncedContextFingerprint !== fingerprint
+        ) {
+          throw new Error(`vehicle context revision ${context.revision} conflicts with the context already synchronized at that revision`);
+        }
+        const changed = syncedContextFingerprint !== fingerprint;
         st.vehicleContext = { ...context };
-        return { synced: true, vehicle_context: { ...st.vehicleContext } };
+        syncedContextRevision = context.revision;
+        syncedContextFingerprint = fingerprint;
+        return { synced: true, changed, vehicle_context: { ...st.vehicleContext } };
       },
     },
     {
       name: 'set_view',
+      title: 'Set digital twin view',
       description: 'Move the camera to one of the drawing\'s standard views. side, front and top are true orthographic elevations; iso, q34f and q34r are perspective.',
-      inputSchema: { type: 'object', required: ['view'], properties: { view: { type: 'string', enum: ['iso', 'q34f', 'q34r', 'side', 'front', 'top'] } } },
+      inputSchema: { type: 'object', required: ['view'], properties: { view: { type: 'string', enum: ['iso', 'q34f', 'q34r', 'side', 'front', 'top'] } }, additionalProperties: false },
+      annotations: SAFE_SET,
       run: ({ view }) => {
         if (!config.views.some((v) => v.id === view)) throw new Error(`unknown view "${view}"`);
         setView(view); return { view, camera: cameraState() };
@@ -108,11 +207,14 @@ export function installWebMCP(ctx) {
     },
     {
       name: 'set_motion',
+      title: 'Set digital twin motion',
       description: 'Turn one of the sheet\'s motions on or off. run = idle telemetry and wheel spin; drive = rolling road with steering; lights = headlamp and tail-lamp beams; panels = dissolve the body shell to reveal the chassis; explode = separate every component along its assembly axis; open = swing the hood, liftgate, all four doors and the charge-port door.',
       inputSchema: {
         type: 'object', required: ['motion'],
         properties: { motion: { type: 'string', enum: ['run', 'drive', 'lights', 'panels', 'explode', 'open'] }, on: { type: 'boolean', description: 'Omit to toggle.' } },
+        additionalProperties: false,
       },
+      annotations: SAFE_ACTION,
       run: ({ motion: m, on }) => {
         const cur = { run: st.run, drive: st.drive, lights: st.lights, panels: !st.panels, explode: st.explodeOn, open: st.openOn }[m];
         if (cur === undefined) throw new Error(`unknown motion "${m}"`);
@@ -122,6 +224,7 @@ export function installWebMCP(ctx) {
     },
     {
       name: 'set_camera',
+      title: 'Set digital twin camera',
       description: 'Place the camera by absolute pose. azimuth 0 looks at the driver side in profile and increases clockwise seen from above; elevation 0 is eye level, 90 is directly overhead. Any field may be omitted to leave it unchanged.',
       inputSchema: {
         type: 'object',
@@ -131,7 +234,9 @@ export function installWebMCP(ctx) {
           distance_m: { type: 'number', minimum: 1.2, maximum: 22 },
           orthographic: { type: 'boolean', description: 'True for a flat technical projection with no convergence.' },
         },
+        additionalProperties: false,
       },
+      annotations: SAFE_SET,
       run: (a) => {
         takeCamera();
         if (a.azimuth_deg !== undefined) rig.cur.az = a.azimuth_deg;
@@ -143,8 +248,10 @@ export function installWebMCP(ctx) {
     },
     {
       name: 'orbit_camera',
+      title: 'Orbit digital twin camera',
       description: 'Nudge the camera relative to where it is now. Use this to walk around the vehicle a few degrees at a time rather than guessing an absolute pose.',
-      inputSchema: { type: 'object', properties: { d_azimuth_deg: { type: 'number' }, d_elevation_deg: { type: 'number' }, zoom: { type: 'number', description: 'Multiplier on distance; 0.8 moves closer, 1.25 pulls back.' } } },
+      inputSchema: { type: 'object', properties: { d_azimuth_deg: { type: 'number' }, d_elevation_deg: { type: 'number', minimum: -84, maximum: 84 }, zoom: { type: 'number', minimum: 0.1, maximum: 4, description: 'Positive multiplier on distance; 0.8 moves closer, 1.25 pulls back.' } }, additionalProperties: false },
+      annotations: SAFE_ACTION,
       run: (a) => {
         takeCamera(true);   // keep orbiting whatever frame_part centred on
         if (a.d_azimuth_deg) rig.cur.az += a.d_azimuth_deg;
@@ -155,17 +262,21 @@ export function installWebMCP(ctx) {
     },
     {
       name: 'list_parts',
+      title: 'List digital twin parts',
       description: 'Every named component in the vehicle. category is one of shell (body panels and glass), chassis (battery, subframes, drive units), running (wheels and brakes) or interior. Pass detail:true for bounding boxes in metres.',
-      inputSchema: { type: 'object', properties: { category: { type: 'string' }, detail: { type: 'boolean' } } },
-      run: ({ category, detail }) => ({
-        count: vehicle.order.length,
-        parts: vehicle.order.filter((p) => !category || p.category === category).map((p) => describe(p, detail)),
-      }),
+      inputSchema: { type: 'object', properties: { category: { type: 'string', enum: ['shell', 'chassis', 'running', 'interior'] }, detail: { type: 'boolean' } }, additionalProperties: false },
+      annotations: READ_ONLY,
+      run: ({ category, detail }) => {
+        const parts = vehicle.order.filter((p) => !category || p.category === category).map((p) => describe(p, detail));
+        return { count: parts.length, total_count: vehicle.order.length, parts };
+      },
     },
     {
       name: 'get_part',
+      title: 'Get digital twin part',
       description: 'Full record for one component: its engineering description, its bounding box in metres in the vehicle frame, and where EXPLODE sends it. Accepts either the id from list_parts or the label shown on the sheet.',
-      inputSchema: { type: 'object', required: ['part'], properties: { part: { type: 'string' } } },
+      inputSchema: { type: 'object', required: ['part'], properties: { part: { type: 'string', minLength: 1, maxLength: 80 } }, additionalProperties: false },
+      annotations: READ_ONLY,
       run: ({ part }) => {
         const p = findPart(part);
         if (!p) throw new Error(`no part "${part}". Call list_parts for the ${vehicle.order.length} available ids.`);
@@ -174,11 +285,14 @@ export function installWebMCP(ctx) {
     },
     {
       name: 'frame_part',
+      title: 'Frame digital twin part',
       description: 'Point the camera at one component and zoom so it fills the sheet. The best way to inspect a specific piece of the vehicle.',
       inputSchema: {
         type: 'object', required: ['part'],
-        properties: { part: { type: 'string' }, azimuth_deg: { type: 'number' }, elevation_deg: { type: 'number' }, margin: { type: 'number', description: 'Fraction of slack around the part, default 0.6.' } },
+        properties: { part: { type: 'string', minLength: 1, maxLength: 80 }, azimuth_deg: { type: 'number' }, elevation_deg: { type: 'number', minimum: 2, maximum: 86 }, margin: { type: 'number', minimum: 0.1, maximum: 3, description: 'Fraction of slack around the part, default 0.6.' } },
+        additionalProperties: false,
       },
+      annotations: SAFE_SET,
       run: ({ part, azimuth_deg, elevation_deg, margin = 0.6 }) => {
         const p = findPart(part);
         if (!p) throw new Error(`no part "${part}"`);
@@ -201,8 +315,10 @@ export function installWebMCP(ctx) {
     },
     {
       name: 'highlight_part',
+      title: 'Highlight digital twin part',
       description: 'Select a component: it is picked out of the drawing and a numbered leader runs to it, the same as hovering its row in the key. Call with no argument to clear.',
-      inputSchema: { type: 'object', properties: { part: { type: 'string', description: 'Omit to clear the selection.' } } },
+      inputSchema: { type: 'object', properties: { part: { type: 'string', minLength: 1, maxLength: 80, description: 'Omit to clear the selection.' } }, additionalProperties: false },
+      annotations: SAFE_SET,
       run: ({ part }) => {
         const p = part ? findPart(part) : null;
         if (part && !p) throw new Error(`no part "${part}"`);
@@ -212,20 +328,26 @@ export function installWebMCP(ctx) {
     },
     {
       name: 'set_annotations',
+      title: 'Set technical annotations',
       description: 'Show or hide the callout cards, dimension lines and title block, leaving the vehicle alone. Hide them for a clean look at the geometry.',
-      inputSchema: { type: 'object', required: ['visible'], properties: { visible: { type: 'boolean' } } },
+      inputSchema: { type: 'object', required: ['visible'], properties: { visible: { type: 'boolean' } }, additionalProperties: false },
+      annotations: SAFE_SET,
       run: ({ visible }) => { ui.setCards(visible); return { annotations_visible: visible }; },
     },
     {
       name: 'get_specification',
+      title: 'Get vehicle specification',
       description: 'The published Rivian R2 figures the model is built to, in metres, kilograms and seconds. Every profile curve in the geometry is fitted to these plus Rivian\'s official orthographic drawings.',
-      inputSchema: { type: 'object', properties: {} },
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      annotations: READ_ONLY,
       run: () => ({ ...vehicle.SPEC }),
     },
     {
       name: 'measure',
+      title: 'Measure between digital twin parts',
       description: 'Distance in metres between the centres of two components, plus the per-axis separation. Use it to check clearances and packaging.',
-      inputSchema: { type: 'object', required: ['from', 'to'], properties: { from: { type: 'string' }, to: { type: 'string' } } },
+      inputSchema: { type: 'object', required: ['from', 'to'], properties: { from: { type: 'string', minLength: 1, maxLength: 80 }, to: { type: 'string', minLength: 1, maxLength: 80 } }, additionalProperties: false },
+      annotations: READ_ONLY,
       run: ({ from, to }) => {
         const a = findPart(from), b = findPart(to);
         if (!a || !b) throw new Error(`no part "${!a ? from : to}"`);
@@ -237,8 +359,10 @@ export function installWebMCP(ctx) {
     },
     {
       name: 'reset',
+      title: 'Reset digital twin presentation',
       description: 'Return the sheet to how it opens: ISO view, shell on, nothing exploded or open, nothing selected.',
-      inputSchema: { type: 'object', properties: {} },
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      annotations: SAFE_SET,
       run: () => {
         ctx.select(null);
         for (const [m, want] of [['drive', false], ['lights', false], ['explode', false], ['open', false], ['run', true]]) {
@@ -256,40 +380,82 @@ export function installWebMCP(ctx) {
   const call = async (name, args = {}) => {
     const t = TOOLS.find((x) => x.name === name);
     if (!t) throw new Error(`unknown tool "${name}". Available: ${TOOLS.map((x) => x.name).join(', ')}`);
-    return t.run(args || {});
+    const input = args === undefined ? {} : args;
+    validateValue(input, t.inputSchema, name);
+    return t.run(input);
   };
 
   // 1. window.r2 — always present, so automation never depends on an origin trial being enabled
-  const api = { tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })), call };
-  for (const t of TOOLS) api[t.name] = (args) => call(t.name, args);
+  const api = {
+    tools: TOOLS.map(({ name, title, description, inputSchema, annotations }) => (
+      { name, title, description, inputSchema, annotations }
+    )),
+    call,
+    registered: false,
+  };
+  for (const t of TOOLS) api[t.name] = (args = {}) => call(t.name, args);
   window.r2 = api;
 
   // 2. postMessage bridge, for the sheet embedded in an iframe
-  window.addEventListener('message', async (e) => {
+  const onBridgeMessage = async (e) => {
     const m = e.data;
-    if (e.origin !== location.origin || !m || m.source !== 'r2-blueprint' || !m.tool) return;
+    const expectedSource = window.parent === window ? window : window.parent;
+    if (
+      e.origin !== location.origin
+      || e.source !== expectedSource
+      || !isRecord(m)
+      || m.source !== 'r2-blueprint'
+      || typeof m.id !== 'string'
+      || m.id.length < 1
+      || m.id.length > 128
+      || typeof m.tool !== 'string'
+    ) return;
     try { e.source?.postMessage({ source: 'r2-blueprint-result', id: m.id, ok: true, result: await call(m.tool, m.args) }, e.origin); }
     catch (err) { e.source?.postMessage({ source: 'r2-blueprint-result', id: m.id, ok: false, error: String(err.message || err) }, e.origin); }
-  });
+  };
+  window.addEventListener('message', onBridgeMessage);
 
   // 3. modelContext — current hosts expose this on document; retain the
   // navigator fallback for proposal-era browsers.
   const mc = document.modelContext || navigator.modelContext;
+  const registrationController = new AbortController();
+  api.dispose = () => {
+    registrationController.abort();
+    window.removeEventListener('message', onBridgeMessage);
+    if (window.r2 === api) delete window.r2;
+  };
   if (mc) {
     const decl = TOOLS.map((t) => ({
       name: t.name,
+      title: t.title,
       description: t.description,
       inputSchema: t.inputSchema,
-      async execute(args) {
-        try { return { content: [{ type: 'text', text: JSON.stringify(await call(t.name, args), null, 1) }] }; }
-        catch (err) { return { content: [{ type: 'text', text: `error: ${err.message || err}` }], isError: true }; }
+      annotations: t.annotations,
+      async execute(args = {}, options = {}) {
+        if (options.signal?.aborted) throw options.signal.reason || new DOMException('Tool execution was aborted.', 'AbortError');
+        const result = await call(t.name, args);
+        if (options.signal?.aborted) throw options.signal.reason || new DOMException('Tool execution was aborted.', 'AbortError');
+        return result;
       },
     }));
-    try {
-      if (typeof mc.provideContext === 'function') mc.provideContext({ tools: decl });
-      else if (typeof mc.registerTool === 'function') decl.forEach((t) => mc.registerTool(t));
+    api.registration = (async () => {
+      if (typeof mc.provideContext === 'function') {
+        await mc.provideContext({ tools: decl });
+      } else if (typeof mc.registerTool === 'function') {
+        await Promise.all(decl.map((t) => mc.registerTool(t, { signal: registrationController.signal })));
+      } else {
+        return false;
+      }
       api.registered = true;
-    } catch (err) { console.warn('[r2] WebMCP registration failed:', err); }
+      return true;
+    })().catch((err) => {
+      registrationController.abort();
+      api.registrationError = String(err.message || err);
+      console.warn('[r2] WebMCP registration failed:', err);
+      return false;
+    });
+  } else {
+    api.registration = Promise.resolve(false);
   }
   return api;
 }

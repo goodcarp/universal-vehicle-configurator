@@ -57,9 +57,19 @@ pnpm install
 pnpm dev
 ```
 
+### One model source
+
+Garage owns the procedural R2 geometry. Edit only
+`public/garage/src/vehicle.js` and `public/garage/src/geom.js`; Configure's
+copies under `src/scene/r2/` are generated mirrors. `pnpm dev`, `pnpm test`,
+and `pnpm build` synchronize them automatically, including live updates while
+the development server is open. Use `pnpm model:check` to verify parity or
+`pnpm model:sync` to synchronize explicitly.
+
 ## Verification
 
 ```sh
+pnpm model:check
 pnpm lint
 pnpm typecheck
 pnpm test:run

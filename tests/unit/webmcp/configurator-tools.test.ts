@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import catalogData from "../../../src/data/catalogs/r2.catalog.json";
 import type { Catalog } from "../../../src/domain/catalog.types";
+import type { OwnerGuideBridge } from "../../../src/owner-guide/owner-guide-bridge";
 import { createConfiguratorStore } from "../../../src/state/configurator.store";
 import { createMutationService } from "../../../src/state/mutation.service";
 import {
@@ -98,6 +99,9 @@ describe("real configurator Site Tools", () => {
         (tool) => tool.inputSchema.additionalProperties === false,
       ),
     ).toBe(true);
+    expect(definitions.every((tool) => tool.title && tool.title.length > 3)).toBe(true);
+    expect(definitions.every((tool) => tool.annotations?.destructiveHint === false)).toBe(true);
+    expect(definitions.every((tool) => tool.annotations?.openWorldHint === false)).toBe(true);
 
     const tools = new Map(definitions.map((tool) => [tool.name, tool]));
     const current = await tools.get("get_vehicle_configuration")?.execute({});
@@ -537,6 +541,53 @@ describe("real configurator Site Tools", () => {
     expect(() =>
       tools.get("get_vehicle_configuration")?.execute({ extra: true }),
     ).toThrow("unsupported field: extra");
+    await expect(
+      tools.get("inspect_vehicle_part")?.execute({ part: "battery", margin: Infinity }),
+    ).rejects.toThrow("finite number");
+    await expect(
+      tools.get("measure_vehicle_parts")?.execute({ from: " ", to: "battery" }),
+    ).rejects.toThrow("non-blank string");
+  });
+
+  it("functionally covers all six host-to-Garage tools through the injectable bridge", async () => {
+    const dependencies = setup();
+    const call = vi.fn(async (
+      tool: string,
+      args: Record<string, unknown>,
+      _options?: { signal?: AbortSignal },
+    ) => {
+      void _options;
+      if (tool === "get_state") return { view: "iso" };
+      if (tool === "list_parts") return { count: 1, parts: [{ id: "battery" }] };
+      if (tool === "get_part") return { id: "battery", label: "Structural battery", category: "chassis" };
+      if (tool === "frame_part") return { part: args.part, camera: { preset: null } };
+      if (tool === "set_view") return { view: args.view };
+      if (tool === "set_motion") return { motion: args.motion, on: args.on };
+      if (tool === "measure") return { from: args.from, to: args.to, distance_m: 2 };
+      if (tool === "highlight_part" || tool === "set_annotations") return { ok: true };
+      throw new Error(`unexpected test tool ${tool}`);
+    });
+    const syncContext = vi.fn().mockResolvedValue({ synced: true });
+    const setWorkspace = vi.fn();
+    dependencies.ownerGuide = {
+      call,
+      syncContext,
+      setWorkspace,
+    } as unknown as OwnerGuideBridge;
+    const tools = toolsByName(dependencies);
+    const controller = new AbortController();
+    const execution = { signal: controller.signal };
+
+    await expect(tools.get("get_vehicle_twin_state")!.execute({}, execution)).resolves.toMatchObject({ ok: true, twin: { view: "iso" } });
+    await expect(tools.get("list_vehicle_parts")!.execute({ category: "chassis" }, execution)).resolves.toMatchObject({ ok: true, count: 1 });
+    await expect(tools.get("inspect_vehicle_part")!.execute({ part: "battery" }, execution)).resolves.toMatchObject({ ok: true, workspace: "garage", part: { id: "battery" } });
+    await expect(tools.get("set_vehicle_twin_view")!.execute({ view: "side" }, execution)).resolves.toMatchObject({ ok: true, workspace: "garage" });
+    await expect(tools.get("set_vehicle_twin_motion")!.execute({ motion: "open", on: true }, execution)).resolves.toMatchObject({ ok: true, motion: "open", on: true });
+    await expect(tools.get("measure_vehicle_parts")!.execute({ from: "battery", to: "body" }, execution)).resolves.toMatchObject({ ok: true, distance_m: 2 });
+
+    expect(syncContext).toHaveBeenCalledTimes(6);
+    expect(setWorkspace).toHaveBeenCalledWith("garage");
+    expect(call.mock.calls.every(([, , options]) => options?.signal === controller.signal)).toBe(true);
   });
 });
 

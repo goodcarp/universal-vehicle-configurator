@@ -57,3 +57,50 @@ vehicle identity.
 
 Deployment, deployed-device fallback checks, the recorded demo, and Devpost
 submission assets remain separate final-mile tasks.
+
+## Final hardening — WebMCP contract
+
+- Audited all 16 host tools and all 14 direct Garage tools. Every tool now has
+  a closed top-level schema, a human-readable title, and explicit read-only,
+  non-destructive, idempotency, closed-world, and trusted-content hints.
+- Direct Garage calls now enforce their published schemas at runtime, report
+  filtered counts truthfully, and reject stale or conflicting configuration
+  revisions instead of rolling the twin backward.
+- The Configure/Garage bridge now validates source, origin, request id, and
+  response status; propagates cancellation through frame loading and calls;
+  bounds timeouts; and refuses to continue a Garage sequence if the build
+  revision changes while its frame is loading.
+- Added direct-tool, host-to-Garage, and cross-frame regression coverage.
+- A production-browser smoke exposed and fixed an iframe startup race: the
+  bridge had mistaken the initial `about:blank` document for a loaded Garage,
+  so its first messages could arrive before Garage installed its listener.
+  The rebuilt preview now completes a first-call Garage sync, battery frame,
+  and explode action at the same configuration revision.
+
+## Canonical Garage model source
+
+- Garage's `public/garage/src/vehicle.js` and `geom.js` are now the only
+  human-edited procedural geometry sources. Configure's `src/scene/r2/` copies
+  carry generated-file notices and are reproduced deterministically.
+- Development, test, and production-build commands synchronize the mirror
+  before work begins. The Vite development server also watches Garage and
+  reloads Configure after a geometry save.
+- A standalone parity command, CI gate, and Vitest check reject stale or
+  hand-edited Configure mirrors.
+- Verification covered a real live-edit round trip, an intentionally stale
+  mirror that made the parity test fail, the restored passing parity test, 21
+  focused scene tests, ESLint, and a production Vite bundle.
+
+## Responsive hardening
+
+- Measured Configure and Garage at 390×844, 700×880, 768×1024, 1280×800,
+  and 1728×1000. The intermediate split-pane range is handled explicitly.
+- Removed a legacy tool-chip style collision that made the header exceed its
+  reserved height, constrained the showroom stage to its sticky viewport, and
+  let the stacked configuration rail use the full available width.
+- Docked Garage shortcuts away from the engineering title block and reserved a
+  compact mobile lane so the lifecycle switch, human controls, model, and
+  drawing metadata remain available together.
+- On portrait touch devices, Garage's view, motion, card, and panel controls now
+  use full 44 px targets while narrow mouse-driven panes retain the denser
+  technical layout.
