@@ -13,6 +13,21 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    // The measurement instruments. These are Node scripts that also carry
+    // browser code: the bodies of page.evaluate and addInitScript are
+    // serialised and run inside the page, so both sets of globals are
+    // legitimately in scope here and nowhere else.
+    files: ["tools/eyes/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        URL: "readonly",
+        document: "readonly",
+        window: "readonly",
+        HTMLCanvasElement: "readonly",
+      },
+    },
+  },
+  {
     files: ["**/*.{ts,tsx}"],
     plugins: {
       "react-hooks": reactHooks,

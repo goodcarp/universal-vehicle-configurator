@@ -43,7 +43,8 @@ Updated: 2026-09-03
 - [x] Browser-confirm 17 host tools and 14 direct Garage tools.
 - [x] Browser-confirm the configured Performance R2 context reaches Garage and
   the agent can reveal/frame the structural battery.
-- [x] Confirm touch orbit, reduced motion, and WebGL fallback — verified
+- [x] Confirm touch orbit, reduced motion, and WebGL fallback — committed as
+  `pnpm eyes:degrade`, 26/26, so it is re-runnable rather than a one-off. Verified
   against the production build served locally, not yet against a deployed
   host. Touch drag changes the view on phone and tablet, on both the live 3D
   and the no-WebGL paths; control taps still register. `prefers-reduced-motion`

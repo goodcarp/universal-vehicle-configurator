@@ -10,6 +10,9 @@
   "scripts": {
     "build": "node scripts/sync-r2-model.mjs && tsc --noEmit && vite build",
     "dev": "node scripts/sync-r2-model.mjs && vite --host 0.0.0.0",
+    "eyes:degrade": "node tools/eyes/degrade.mjs",
+    "eyes:isolate": "node tools/eyes/isolate.mjs",
+    "eyes:selftest": "node tools/eyes/selftest.mjs",
     "lint": "eslint .",
     "model:check": "node scripts/promote-garage-model.mjs --check",
     "model:promote": "node scripts/promote-garage-model.mjs",
