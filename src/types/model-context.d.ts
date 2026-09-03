@@ -1,5 +1,8 @@
 type ModelContextAnnotations = {
   readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
   untrustedContentHint?: boolean;
 };
 

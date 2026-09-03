@@ -94,7 +94,7 @@ export type VehicleCanvasProps = Readonly<{
   paint?: VehiclePaintSelection;
   wheel?: VehicleWheelSelection;
   interior?: VehicleInteriorSelection;
-  /** Which registered body draws the vehicle. Defaults to the licensed GLB. */
+  /** Which registered body draws the vehicle. Defaults to the Garage-authored procedural R2. */
   modelSource?: VehicleModelSourceId;
   /** Doors, frunk and liftgate open. Only offered by bodies that can open. */
   bodyOpen?: boolean;

@@ -14,6 +14,11 @@ import {
 } from "../domain/ownership";
 import { resolveAtomicPatch } from "../domain/resolve";
 import {
+  ownerGuideBridge,
+  type OwnerGuideBridge,
+  type VehicleTwinContext,
+} from "../owner-guide/owner-guide-bridge";
+import {
   configuratorMutations,
   configuratorStore,
   encodeShareState,
@@ -34,6 +39,12 @@ export const CONFIGURATOR_TOOL_NAMES = [
   "set_vehicle_buyer_context",
   "estimate_vehicle_ownership_cost",
   "compare_vehicle_configurations",
+  "get_vehicle_twin_state",
+  "list_vehicle_parts",
+  "inspect_vehicle_part",
+  "set_vehicle_twin_view",
+  "set_vehicle_twin_motion",
+  "measure_vehicle_parts",
 ] as const;
 
 export type ConfiguratorToolName = (typeof CONFIGURATOR_TOOL_NAMES)[number];
@@ -110,6 +121,8 @@ export interface ConfiguratorToolsDependencies {
   store: ConfiguratorStore;
   mutations: MutationService;
   presentation: ConfiguratorPresentationController;
+  /** Injectable so the host/iframe contract can be covered without a browser frame. */
+  ownerGuide?: OwnerGuideBridge;
 }
 
 export type ConfiguratorSiteToolsStatus =
@@ -128,6 +141,21 @@ const EMPTY_SCHEMA = {
   type: "object",
   properties: {},
   additionalProperties: false,
+} as const;
+
+const READ_ONLY_ANNOTATIONS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+  untrustedContentHint: false,
+} as const;
+
+const SAFE_MUTATION_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  openWorldHint: false,
+  untrustedContentHint: false,
 } as const;
 
 const PRESENTATION_MODES = ["showroom", "blueprint"] as const;
@@ -250,6 +278,39 @@ function parseExpectedRevision(value: unknown, toolName: string): number {
     throw new TypeError(`${toolName} requires expectedRevision as a positive safe integer.`);
   }
   return value as number;
+}
+
+function parseFiniteNumber(
+  value: unknown,
+  field: string,
+  toolName: string,
+  range: { minimum?: number; maximum?: number } = {},
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new TypeError(`${toolName} requires ${field} as a finite number.`);
+  }
+  if (range.minimum !== undefined && value < range.minimum) {
+    throw new RangeError(`${toolName} requires ${field} to be at least ${range.minimum}.`);
+  }
+  if (range.maximum !== undefined && value > range.maximum) {
+    throw new RangeError(`${toolName} requires ${field} to be at most ${range.maximum}.`);
+  }
+  return value;
+}
+
+function parseBoundedString(
+  value: unknown,
+  field: string,
+  toolName: string,
+  maximum = 80,
+): string {
+  if (typeof value !== "string" || value.trim().length < 1 || value.length > maximum) {
+    throw new TypeError(
+      `${toolName} requires ${field} as a non-blank string of at most ${maximum} characters.`,
+    );
+  }
+  return value;
 }
 
 function groupMap(catalog: Catalog): Map<string, CatalogGroup> {
@@ -499,6 +560,28 @@ function compactConfiguration(state: ConfiguratorStoreState) {
   };
 }
 
+function vehicleTwinContext(state: ConfiguratorStoreState): VehicleTwinContext {
+  const selectedLabel = (groupId: string, fallback: string) => {
+    const ids = new Set(state.domain.selections[groupId] ?? []);
+    return state.catalog.options.find(
+      (option) => option.group === groupId && ids.has(option.id),
+    )?.label ?? fallback;
+  };
+
+  return {
+    build: selectedLabel("build", `${state.catalog.product.make} ${state.catalog.product.model}`),
+    paint: selectedLabel("paint", "Not supplied"),
+    wheels: selectedLabel("wheels", "Not supplied"),
+    interior: selectedLabel("interior", "Not supplied"),
+    rangeMiles:
+      typeof state.resolved.specs.range_mi === "number"
+        ? state.resolved.specs.range_mi
+        : null,
+    vehicleTotal: state.resolved.price.vehicleTotal,
+    revision: state.domain.revision,
+  };
+}
+
 function transactionState(state: ConfiguratorStoreState) {
   const canUndo =
     state.session.undo !== null &&
@@ -630,9 +713,39 @@ export function createConfiguratorToolDefinitions(
   dependencies: ConfiguratorToolsDependencies,
 ): readonly ToolDefinition[] {
   const { store, mutations, presentation } = dependencies;
+  const bridge = dependencies.ownerGuide ?? ownerGuideBridge;
   const catalog = store.getState().catalog;
   const selectionPatchSchema = patchSchema(catalog);
   const expectedRevisionSchema = { type: "integer", minimum: 1 } as const;
+
+  /**
+   * Frame loading can take seconds. Never let a tool act on a configuration
+   * snapshot that changed while it was waiting; repair the twin context to the
+   * newest revision and ask the caller to retry instead.
+   */
+  const synchronizeTwin = async (toolName: ConfiguratorToolName, signal?: AbortSignal) => {
+    const state = store.getState();
+    const context = vehicleTwinContext(state);
+    await bridge.syncContext(context, { signal });
+    throwIfAborted(signal);
+    const latest = store.getState();
+    if (latest.domain.revision !== state.domain.revision) {
+      await bridge.syncContext(vehicleTwinContext(latest), { signal });
+      throw new Error(
+        `${toolName} stopped because the configuration moved from revision ${state.domain.revision} to ${latest.domain.revision} while Garage was loading. Retry against the current build.`,
+      );
+    }
+    return { state, context };
+  };
+
+  const assertTwinRevision = (expectedRevision: number, toolName: ConfiguratorToolName) => {
+    const currentRevision = store.getState().domain.revision;
+    if (currentRevision !== expectedRevision) {
+      throw new Error(
+        `${toolName} stopped because the configuration moved to revision ${currentRevision}. Retry against the current build.`,
+      );
+    }
+  };
 
   const getConfiguration: ToolDefinition = {
     name: CONFIGURATOR_TOOL_NAMES[0],
@@ -640,7 +753,7 @@ export function createConfiguratorToolDefinitions(
     description:
       "Read the current vehicle build, buyer context, price, range, delivery status, revision, transaction status, presentation state, and which vehicle body is on screen. Check renderedBody before describing what the person is looking at: representsConfiguredVehicle is false when the viewport is showing a licensed stand-in of a different car rather than the vehicle being configured. Call this before making a change so expectedRevision is current.",
     inputSchema: EMPTY_SCHEMA,
-    annotations: { readOnlyHint: true, untrustedContentHint: false },
+    annotations: READ_ONLY_ANNOTATIONS,
     execute: (input, options) => {
       throwIfAborted(options?.signal);
       const record = assertRecord(input, CONFIGURATOR_TOOL_NAMES[0]);
@@ -671,7 +784,7 @@ export function createConfiguratorToolDefinitions(
       },
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: true, untrustedContentHint: false },
+    annotations: READ_ONLY_ANNOTATIONS,
     execute: (input, options) => {
       throwIfAborted(options?.signal);
       const record = assertRecord(input, CONFIGURATOR_TOOL_NAMES[1]);
@@ -739,7 +852,7 @@ export function createConfiguratorToolDefinitions(
       required: ["expectedRevision", "patch"],
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: true, untrustedContentHint: false },
+    annotations: READ_ONLY_ANNOTATIONS,
     execute: (input, options) => {
       throwIfAborted(options?.signal);
       const record = assertRecord(input, CONFIGURATOR_TOOL_NAMES[2]);
@@ -780,7 +893,7 @@ export function createConfiguratorToolDefinitions(
       required: ["expectedRevision", "stages"],
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: false, untrustedContentHint: false },
+    annotations: { ...SAFE_MUTATION_ANNOTATIONS, idempotentHint: false },
     execute: async (input, options) => {
       throwIfAborted(options?.signal);
       const record = assertRecord(input, CONFIGURATOR_TOOL_NAMES[3]);
@@ -797,7 +910,7 @@ export function createConfiguratorToolDefinitions(
         assertOnlyKeys(stage, ["label", "patch"], CONFIGURATOR_TOOL_NAMES[3]);
         if (
           typeof stage.label !== "string" ||
-          stage.label.length < 1 ||
+          stage.label.trim().length < 1 ||
           stage.label.length > 60
         ) {
           throw new TypeError(
@@ -829,7 +942,7 @@ export function createConfiguratorToolDefinitions(
       },
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: false, untrustedContentHint: false },
+    annotations: { ...SAFE_MUTATION_ANNOTATIONS, idempotentHint: true },
     execute: (input, options) => {
       throwIfAborted(options?.signal);
       const record = assertRecord(input, CONFIGURATOR_TOOL_NAMES[4]);
@@ -837,7 +950,7 @@ export function createConfiguratorToolDefinitions(
       if (
         record.reason !== undefined &&
         (typeof record.reason !== "string" ||
-          record.reason.length < 1 ||
+          record.reason.trim().length < 1 ||
           record.reason.length > 80)
       ) {
         throw new TypeError(`${CONFIGURATOR_TOOL_NAMES[4]} reason must be 1–80 characters.`);
@@ -868,7 +981,7 @@ export function createConfiguratorToolDefinitions(
       required: ["expectedRevision"],
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: false, untrustedContentHint: false },
+    annotations: { ...SAFE_MUTATION_ANNOTATIONS, idempotentHint: false },
     execute: (input, options) => {
       throwIfAborted(options?.signal);
       const record = assertRecord(input, CONFIGURATOR_TOOL_NAMES[5]);
@@ -902,7 +1015,7 @@ export function createConfiguratorToolDefinitions(
       minProperties: 1,
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: false, untrustedContentHint: false },
+    annotations: { ...SAFE_MUTATION_ANNOTATIONS, idempotentHint: true },
     execute: (input, options) => {
       throwIfAborted(options?.signal);
       const record = assertRecord(input, CONFIGURATOR_TOOL_NAMES[6]);
@@ -1020,7 +1133,7 @@ export function createConfiguratorToolDefinitions(
       required: ["expectedRevision", "patch"],
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: false, untrustedContentHint: false },
+    annotations: { ...SAFE_MUTATION_ANNOTATIONS, idempotentHint: true },
     execute: (input, options) => {
       throwIfAborted(options?.signal);
       const record = assertRecord(input, CONFIGURATOR_TOOL_NAMES[7]);
@@ -1116,7 +1229,7 @@ export function createConfiguratorToolDefinitions(
       required: ["expectedRevision"],
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: true, untrustedContentHint: false },
+    annotations: READ_ONLY_ANNOTATIONS,
     execute: (input, options) => {
       throwIfAborted(options?.signal);
       const toolName = CONFIGURATOR_TOOL_NAMES[8];
@@ -1233,7 +1346,7 @@ export function createConfiguratorToolDefinitions(
       required: ["candidates"],
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: true, untrustedContentHint: false },
+    annotations: READ_ONLY_ANNOTATIONS,
     execute: (input, options) => {
       throwIfAborted(options?.signal);
       const toolName = CONFIGURATOR_TOOL_NAMES[9];
@@ -1263,13 +1376,11 @@ export function createConfiguratorToolDefinitions(
       for (const raw of record.candidates) {
         const candidate = assertRecord(raw, toolName);
         assertOnlyKeys(candidate, ["label", "patch"], toolName);
-        if (typeof candidate.label !== "string" || candidate.label.length < 1) {
-          throw new TypeError(`${toolName} requires a label for every candidate.`);
-        }
+        const label = parseBoundedString(candidate.label, "label", toolName, 60);
         const patch = parsePatch(candidate.patch, state.catalog, toolName);
         const resolution = resolveAtomicPatch(state.catalog, base.selections, patch, buyer);
         columns.push({
-          label: candidate.label,
+          label,
           result: resolution.candidate,
           valid: resolution.candidate.valid,
           violations: [...resolution.candidate.violations],
@@ -1298,6 +1409,275 @@ export function createConfiguratorToolDefinitions(
     },
   };
 
+  const getVehicleTwinState: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[10],
+    title: "Get digital twin state",
+    description:
+      "Read the AutoLab Garage camera, active motions, selected component, available views, and the configuration revision synchronized from the configurator. Read-only and does not move the vehicle.",
+    inputSchema: EMPTY_SCHEMA,
+    annotations: READ_ONLY_ANNOTATIONS,
+    execute: async (input, options) => {
+      throwIfAborted(options?.signal);
+      const record = assertRecord(input, CONFIGURATOR_TOOL_NAMES[10]);
+      assertOnlyKeys(record, [], CONFIGURATOR_TOOL_NAMES[10]);
+      const { state, context } = await synchronizeTwin(
+        CONFIGURATOR_TOOL_NAMES[10],
+        options?.signal,
+      );
+      const twin = await bridge.call<Record<string, unknown>>(
+        "get_state",
+        {},
+        { signal: options?.signal },
+      );
+      assertTwinRevision(state.domain.revision, CONFIGURATOR_TOOL_NAMES[10]);
+      return { ok: true, revision: state.domain.revision, context, twin };
+    },
+  };
+
+  const listVehicleParts: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[11],
+    title: "List digital twin components",
+    description:
+      "List the R2 digital twin's named components. Filter by shell, chassis, running gear, or interior; request detail for measured world-space bounds in metres.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        category: { type: "string", enum: ["shell", "chassis", "running", "interior"] },
+        detail: { type: "boolean" },
+      },
+      additionalProperties: false,
+    },
+    annotations: READ_ONLY_ANNOTATIONS,
+    execute: async (input, options) => {
+      throwIfAborted(options?.signal);
+      const toolName = CONFIGURATOR_TOOL_NAMES[11];
+      const record = assertRecord(input, toolName);
+      assertOnlyKeys(record, ["category", "detail"], toolName);
+      if (
+        record.category !== undefined
+        && !["shell", "chassis", "running", "interior"].includes(String(record.category))
+      ) throw new TypeError(`${toolName} received an unsupported category.`);
+      if (record.detail !== undefined && typeof record.detail !== "boolean") {
+        throw new TypeError(`${toolName} expects detail to be a boolean.`);
+      }
+      const { state } = await synchronizeTwin(toolName, options?.signal);
+      const result = await bridge.call<Record<string, unknown>>(
+        "list_parts",
+        {
+          ...(record.category === undefined ? {} : { category: record.category }),
+          detail: record.detail ?? false,
+        },
+        { signal: options?.signal },
+      );
+      assertTwinRevision(state.domain.revision, toolName);
+      return { ok: true, revision: state.domain.revision, ...result };
+    },
+  };
+
+  const inspectVehiclePart: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[12],
+    title: "Inspect a vehicle component",
+    description:
+      "Open AutoLab Garage, find one named component, reveal it through the body when necessary, frame it with the camera, and highlight it with an authored technical leader.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        part: { type: "string", minLength: 1, maxLength: 80 },
+        revealUnderBody: { type: "boolean", description: "Dissolve the shell for chassis and interior components. Defaults to true." },
+        azimuthDeg: { type: "number" },
+        elevationDeg: { type: "number", minimum: 2, maximum: 86 },
+        margin: { type: "number", minimum: 0.1, maximum: 3 },
+      },
+      required: ["part"],
+      additionalProperties: false,
+    },
+    annotations: { ...SAFE_MUTATION_ANNOTATIONS, idempotentHint: true },
+    execute: async (input, options) => {
+      throwIfAborted(options?.signal);
+      const toolName = CONFIGURATOR_TOOL_NAMES[12];
+      const record = assertRecord(input, toolName);
+      assertOnlyKeys(record, ["part", "revealUnderBody", "azimuthDeg", "elevationDeg", "margin"], toolName);
+      const partName = parseBoundedString(record.part, "part", toolName);
+      if (record.revealUnderBody !== undefined && typeof record.revealUnderBody !== "boolean") {
+        throw new TypeError(`${toolName} expects revealUnderBody to be a boolean.`);
+      }
+      const azimuthDeg = parseFiniteNumber(record.azimuthDeg, "azimuthDeg", toolName);
+      const elevationDeg = parseFiniteNumber(
+        record.elevationDeg,
+        "elevationDeg",
+        toolName,
+        { minimum: 2, maximum: 86 },
+      );
+      const margin = parseFiniteNumber(
+        record.margin,
+        "margin",
+        toolName,
+        { minimum: 0.1, maximum: 3 },
+      );
+
+      bridge.setWorkspace("garage");
+      const { state } = await synchronizeTwin(toolName, options?.signal);
+      const part = await bridge.call<{ id: string; label: string; category: string }>(
+        "get_part",
+        { part: partName },
+        { signal: options?.signal },
+      );
+      assertTwinRevision(state.domain.revision, toolName);
+      if (part.category !== "shell" && record.revealUnderBody !== false) {
+        await bridge.call(
+          "set_motion",
+          { motion: "panels", on: true },
+          { signal: options?.signal },
+        );
+        assertTwinRevision(state.domain.revision, toolName);
+      }
+      const frame = await bridge.call<Record<string, unknown>>(
+        "frame_part",
+        {
+          part: partName,
+          ...(azimuthDeg === undefined ? {} : { azimuth_deg: azimuthDeg }),
+          ...(elevationDeg === undefined ? {} : { elevation_deg: elevationDeg }),
+          ...(margin === undefined ? {} : { margin }),
+        },
+        { signal: options?.signal },
+      );
+      assertTwinRevision(state.domain.revision, toolName);
+      await bridge.call(
+        "highlight_part",
+        { part: partName },
+        { signal: options?.signal },
+      );
+      assertTwinRevision(state.domain.revision, toolName);
+      return {
+        ok: true,
+        revision: state.domain.revision,
+        workspace: "garage",
+        part,
+        frame,
+      };
+    },
+  };
+
+  const setVehicleTwinView: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[13],
+    title: "Set digital twin view",
+    description:
+      "Open AutoLab Garage and move the synchronized vehicle to an authored ISO, three-quarter, side, front, or top view. Side, front, and top are true orthographic elevations.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        view: { type: "string", enum: ["iso", "q34f", "q34r", "side", "front", "top"] },
+        annotationsVisible: { type: "boolean" },
+      },
+      required: ["view"],
+      additionalProperties: false,
+    },
+    annotations: { ...SAFE_MUTATION_ANNOTATIONS, idempotentHint: true },
+    execute: async (input, options) => {
+      throwIfAborted(options?.signal);
+      const toolName = CONFIGURATOR_TOOL_NAMES[13];
+      const record = assertRecord(input, toolName);
+      assertOnlyKeys(record, ["view", "annotationsVisible"], toolName);
+      if (!["iso", "q34f", "q34r", "side", "front", "top"].includes(String(record.view))) {
+        throw new TypeError(`${toolName} requires a supported view.`);
+      }
+      if (record.annotationsVisible !== undefined && typeof record.annotationsVisible !== "boolean") {
+        throw new TypeError(`${toolName} expects annotationsVisible to be a boolean.`);
+      }
+      bridge.setWorkspace("garage");
+      const { state } = await synchronizeTwin(toolName, options?.signal);
+      const view = await bridge.call<Record<string, unknown>>(
+        "set_view",
+        { view: record.view },
+        { signal: options?.signal },
+      );
+      assertTwinRevision(state.domain.revision, toolName);
+      if (record.annotationsVisible !== undefined) {
+        await bridge.call(
+          "set_annotations",
+          { visible: record.annotationsVisible },
+          { signal: options?.signal },
+        );
+        assertTwinRevision(state.domain.revision, toolName);
+      }
+      return { ok: true, revision: state.domain.revision, workspace: "garage", view };
+    },
+  };
+
+  const setVehicleTwinMotion: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[14],
+    title: "Set digital twin motion",
+    description:
+      "Open AutoLab Garage and turn a vehicle demonstration on or off: run, drive, lights, shell dissolve, exploded assembly, or every openable panel.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        motion: { type: "string", enum: ["run", "drive", "lights", "panels", "explode", "open"] },
+        on: { type: "boolean" },
+      },
+      required: ["motion"],
+      additionalProperties: false,
+    },
+    annotations: { ...SAFE_MUTATION_ANNOTATIONS, idempotentHint: false },
+    execute: async (input, options) => {
+      throwIfAborted(options?.signal);
+      const toolName = CONFIGURATOR_TOOL_NAMES[14];
+      const record = assertRecord(input, toolName);
+      assertOnlyKeys(record, ["motion", "on"], toolName);
+      if (!["run", "drive", "lights", "panels", "explode", "open"].includes(String(record.motion))) {
+        throw new TypeError(`${toolName} requires a supported motion.`);
+      }
+      if (record.on !== undefined && typeof record.on !== "boolean") {
+        throw new TypeError(`${toolName} expects on to be a boolean.`);
+      }
+      bridge.setWorkspace("garage");
+      const { state } = await synchronizeTwin(toolName, options?.signal);
+      const result = await bridge.call<Record<string, unknown>>(
+        "set_motion",
+        {
+          motion: record.motion,
+          ...(record.on === undefined ? {} : { on: record.on }),
+        },
+        { signal: options?.signal },
+      );
+      assertTwinRevision(state.domain.revision, toolName);
+      return { ok: true, revision: state.domain.revision, workspace: "garage", ...result };
+    },
+  };
+
+  const measureVehicleParts: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[15],
+    title: "Measure between vehicle components",
+    description:
+      "Measure the centre-to-centre distance and per-axis separation between two named digital-twin components in metres. Read-only and does not move the vehicle.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from: { type: "string", minLength: 1, maxLength: 80 },
+        to: { type: "string", minLength: 1, maxLength: 80 },
+      },
+      required: ["from", "to"],
+      additionalProperties: false,
+    },
+    annotations: READ_ONLY_ANNOTATIONS,
+    execute: async (input, options) => {
+      throwIfAborted(options?.signal);
+      const toolName = CONFIGURATOR_TOOL_NAMES[15];
+      const record = assertRecord(input, toolName);
+      assertOnlyKeys(record, ["from", "to"], toolName);
+      const from = parseBoundedString(record.from, "from", toolName);
+      const to = parseBoundedString(record.to, "to", toolName);
+      const { state } = await synchronizeTwin(toolName, options?.signal);
+      const result = await bridge.call<Record<string, unknown>>(
+        "measure",
+        { from, to },
+        { signal: options?.signal },
+      );
+      assertTwinRevision(state.domain.revision, toolName);
+      return { ok: true, revision: state.domain.revision, ...result };
+    },
+  };
+
 
   return [
     getConfiguration,
@@ -1310,6 +1690,12 @@ export function createConfiguratorToolDefinitions(
     setBuyerContext,
     estimateOwnershipCost,
     compareConfigurations,
+    getVehicleTwinState,
+    listVehicleParts,
+    inspectVehiclePart,
+    setVehicleTwinView,
+    setVehicleTwinMotion,
+    measureVehicleParts,
   ];
 }
 
