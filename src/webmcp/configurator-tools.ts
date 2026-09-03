@@ -1614,7 +1614,7 @@ export function createConfiguratorToolDefinitions(
     name: CONFIGURATOR_TOOL_NAMES[14],
     title: "Set digital twin motion",
     description:
-      "Open AutoLab Garage and turn a vehicle demonstration on or off: run, drive, lights, shell dissolve, exploded assembly, or every openable panel.",
+      "Open AutoLab Garage and turn one vehicle demonstration on or off. The values do not all read the way they look: run = idle telemetry and wheel spin; drive = rolling road with steering; lights = headlamp and tail-lamp beams; panels = DISSOLVE the body shell to reveal the chassis (it does not show panels); explode = separate every component along its assembly axis; open = swing the hood, liftgate, four doors and charge-port door. run and drive are coupled — turning drive on turns run on, turning run off turns drive off — so the reply reports all six. Omit `on` to toggle. This switches the page to Garage; set_autolab_workspace switches it back.",
     inputSchema: {
       type: "object",
       properties: {

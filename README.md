@@ -15,16 +15,25 @@ apply, interrupt, undo, price, compare, present, list parts, frame components,
 operate the digital twin, and measure the vehicle while the person remains in
 control.
 
-Every claim an agent can make is citable: incentive outcomes carry resolved
-source records with titles, URLs and retrieval dates, and `get_vehicle_configuration`
-returns a shareable permalink for the build it just described.
+Every configuration and incentive claim an agent can make is citable: incentive
+outcomes carry resolved source records with titles, URLs and retrieval dates,
+and `get_vehicle_configuration` returns a shareable permalink for the build it
+just described, plus a `renderedBody` record saying which vehicle is actually on
+screen and where its geometry came from.
+
+The digital-twin tools are the exception, and deliberately. Part positions,
+bounds and measurements are read off an independent reconstruction fitted to
+published dimensions and photographs — not manufacturer CAD, not a scan — so
+they carry that basis in `get_specification` rather than a source record. Treat
+them as accurate about *this model*, not as engineering data about the vehicle.
 
 ## For judges: running the agent experience
 
 The page publishes its tools on `document.modelContext`, falling back to
-`navigator.modelContext`. If the API appears after page load, the page picks it
-up on its own and the header chip switches from **Manual mode** to
-**17 agent tools** without a reload.
+`navigator.modelContext`. If the API appears within about twelve
+seconds of page load, the page picks it up on its own and the header chip
+switches from **Manual mode** to **17 agent tools** without a reload. After that
+window the page stops watching, so an API injected later needs a reload.
 
 **Option A, ChatGPT desktop.** Update to the latest version, then open this
 URL in the app's built-in browser. Ask it to read the current build.

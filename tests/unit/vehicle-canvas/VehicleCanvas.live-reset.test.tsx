@@ -56,7 +56,10 @@ describe("VehicleCanvas live camera reset contract", () => {
 
     expect(canvas).toHaveAttribute("data-live-status", "loading");
     expect(canvas).not.toHaveAttribute("data-renderer", "live_3d");
-    expect(authoredProfile).toHaveAttribute("aria-hidden", "true");
+    // While the live renderer is still loading, the authored still is what is
+    // on screen, so it has to stay in the accessibility tree. Hiding it for
+    // that window leaves a screen reader with nothing at all.
+    expect(authoredProfile).toHaveAttribute("aria-hidden", "false");
 
     fireEvent.click(screen.getByTestId("signal-licensed-model-ready"));
     await waitFor(() => expect(canvas).toHaveAttribute("data-renderer", "live_3d"));
@@ -64,6 +67,7 @@ describe("VehicleCanvas live camera reset contract", () => {
     fireEvent.click(screen.getByRole("button", { name: "Blueprint" }));
     expect(liveScene).toHaveAttribute("data-render-mode", "blueprint");
     expect(canvas).toHaveAttribute("data-renderer", "live_3d");
+    // Once the live body is drawing, the still is decorative and stands down.
     expect(authoredProfile).toHaveAttribute("aria-hidden", "true");
   });
 });

@@ -299,7 +299,13 @@ export function createMutationService(
     if (expectedRevision !== currentRevision) {
       return rejected(
         "REVISION_CONFLICT",
-        `Expected revision ${expectedRevision}, but the current revision is ${currentRevision}.`,
+        // Say what to do, not only what happened. This is the conflict path for
+        // every build-mutating tool, and it is reached precisely when an agent
+        // has stale state — the moment it most needs the recovery step.
+        `Expected revision ${expectedRevision}, but the current revision is ${currentRevision}. `
+          + "Someone changed the build after you last read it. Call get_vehicle_configuration to "
+          + "read the current revision and selections, decide whether your change still applies, "
+          + "then retry with the revision it returns.",
         currentRevision,
       );
     }

@@ -35,9 +35,9 @@ Updated: 2026-09-03
 - [x] TypeScript passes.
 - [x] ESLint passes; the embedded Garage runtime is treated as a self-contained
   browser artifact and excluded from the host TypeScript lint target.
-- [x] Full suite passes: 119 tests.
-- [x] Focused agent-surface suite passes: 31 tests across the host tools, the
-  direct Garage tools, and the bridge between them
+- [x] Full suite passes: 120 tests.
+- [x] Focused agent-surface suite passes across the host tools, the direct
+  Garage tools, and the bridge between them
   (`vitest run tests/unit/webmcp tests/unit/garage tests/unit/owner-guide`).
 - [x] Production build completes.
 - [x] Browser-confirm 17 host tools and 14 direct Garage tools.
@@ -70,7 +70,9 @@ Updated: 2026-09-03
 - [x] Default hero and Garage vehicle are the same independent procedural R2
   reconstruction fitted to published dimensions—not manufacturer CAD or a
   scan.
-- [x] AutoLab is labeled independent, unofficial, and unaffiliated.
+- [x] AutoLab is labeled independent, unofficial, and unaffiliated — on the
+  Configure surface, and on the Garage sheet itself, which is a supported entry
+  point on its own and reads as an engineering release without it.
 - [x] The optional licensed EX30 reference remains documented and attributed,
   but is not the default demo identity. The social preview card is the R2, and
   `docs/asset-license.md` is marked superseded on the point where it still

@@ -217,7 +217,14 @@ export function installWebMCP(ctx) {
       },
       annotations: SAFE_SET,
       run: (context) => {
-        const fingerprint = JSON.stringify(context);
+        // Ordered, so a logically identical context re-sent with its keys in a
+        // different order is recognised as the same one. JSON.stringify over
+        // the caller's object depends on their insertion order, which is not a
+        // fact about the configuration.
+        const fingerprint = JSON.stringify([
+          context.build, context.paint, context.wheels, context.interior,
+          context.rangeMiles, context.vehicleTotal, context.revision,
+        ]);
         if (syncedContextRevision !== null && context.revision < syncedContextRevision) {
           throw new Error(`stale vehicle context revision ${context.revision}; Garage is already at revision ${syncedContextRevision}`);
         }
@@ -276,7 +283,7 @@ export function installWebMCP(ctx) {
     {
       name: 'set_camera',
       title: 'Set digital twin camera',
-      description: 'Place the camera by absolute pose. azimuth 0 looks at the driver side in profile and increases clockwise seen from above; elevation 0 is eye level, 90 is directly overhead. Any field may be omitted to leave it unchanged.',
+      description: 'Place the camera by absolute pose. azimuth 0 looks at the driver side in profile and increases clockwise seen from above; elevation 0 is eye level, 90 is directly overhead. Omitted angles and distance keep their current value, but any call here leaves the named view preset (the reply\'s preset becomes null), recentres the orbit target on the vehicle, and stops the ISO drift — so a pose set here is reproducible, which the drifting default view is not. To go back to an authored framing, call set_view.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -300,7 +307,7 @@ export function installWebMCP(ctx) {
     {
       name: 'orbit_camera',
       title: 'Orbit digital twin camera',
-      description: 'Nudge the camera relative to where it is now. Use this to walk around the vehicle a few degrees at a time rather than guessing an absolute pose.',
+      description: 'Nudge the camera relative to where it is now. Use this to walk around the vehicle a few degrees at a time rather than guessing an absolute pose. Keeps whatever frame_part centred on, but leaves the named view preset and stops the ISO drift, so the resulting pose is reproducible. Distance is clamped to 1.2-22 m, so a zoom past either end returns the clamped distance rather than the one requested — read distance_m back from the reply.',
       inputSchema: { type: 'object', properties: { d_azimuth_deg: { type: 'number' }, d_elevation_deg: { type: 'number', minimum: -84, maximum: 84 }, zoom: { type: 'number', minimum: 0.1, maximum: 4, description: 'Positive multiplier on distance; 0.8 moves closer, 1.25 pulls back.' } }, additionalProperties: false },
       annotations: SAFE_ACTION,
       run: (a) => {

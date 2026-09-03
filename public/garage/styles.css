@@ -253,3 +253,20 @@ body.cards-off #titleblock,body.cards-off #hdr-left,body.cards-off #hdr-right{
   .btn{height:44px;min-height:44px}
   #cards-toggle,.panel-min{width:44px;height:44px;min-width:44px;min-height:44px}
 }
+
+/*
+ * The provenance note under the title block. Deliberately quiet — it is a
+ * disclaimer, not a headline — but never hidden, and it wraps rather than
+ * truncating, because a clipped disclaimer is not one.
+ */
+.tb-note {
+  margin: 0.5rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--rule, rgba(28, 44, 74, 0.18));
+  font-size: 0.58rem;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  opacity: 0.62;
+  max-width: 34rem;
+}

@@ -63,6 +63,53 @@ const endDrag = (e) => { if (!e.isPrimary) return; dragging = false; canvas.clas
 canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
 canvas.addEventListener('pointerleave', () => { pointerX = pointerY = -1; });
 canvas.addEventListener('wheel', (e) => { e.preventDefault(); rig.zoom(Math.exp(e.deltaY * 0.0012)); rig.idle = 0; }, { passive: false });
+
+// Pinch to zoom. Zoom was bound to the wheel alone, so on a touch device the
+// only way in or out of the drawing was the view presets — and the on-screen
+// hint said "scroll to zoom", which names a gesture that does not exist there.
+// Tracked over raw pointer ids because the orbit handler only follows the
+// primary pointer; a second finger arriving switches this to a pinch and
+// suspends the orbit rather than letting the two fight.
+const pinch = new Map();
+let pinchSpan = 0;
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch') return;
+  pinch.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch.size === 2) {
+    const [a, b] = [...pinch.values()];
+    pinchSpan = Math.hypot(a.x - b.x, a.y - b.y);
+    dragging = false;
+    canvas.classList.remove('dragging');
+  }
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'touch' || !pinch.has(e.pointerId)) return;
+  pinch.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch.size !== 2) return;
+  const [a, b] = [...pinch.values()];
+  const span = Math.hypot(a.x - b.x, a.y - b.y);
+  if (pinchSpan > 0 && span > 0) {
+    if (rig.view) { rig.grab(); ui.setView(null); overlay.setView(null); ui.showViewTitle(null); ui.showPanels(true); st.hidePanels = false; st.view = null; }
+    rig.zoom(pinchSpan / span);
+    rig.idle = 0;
+  }
+  pinchSpan = span;
+});
+const endPinch = (e) => {
+  if (e.pointerType !== 'touch') return;
+  pinch.delete(e.pointerId);
+  if (pinch.size < 2) pinchSpan = 0;
+};
+canvas.addEventListener('pointerup', endPinch);
+canvas.addEventListener('pointercancel', endPinch);
+
+// Name the gesture the device actually has.
+{
+  const hint = document.getElementById('hint');
+  if (hint && window.matchMedia('(hover: none) and (pointer: coarse)').matches) {
+    hint.textContent = 'DRAG TO ORBIT · PINCH TO ZOOM';
+  }
+}
 // arrows orbit and [ ] dolly, so the camera is reachable without a pointer (and from a screen reader
 // or an agent driving the page by keystroke rather than through window.r2)
 function camKey(k, shift) {

@@ -331,9 +331,6 @@ export function VehicleCanvas({
   }, [modelSource]);
 
   const liveViewRequested = true;
-  const liveRendererPending = liveViewRequested
-    && webglSupport === "supported"
-    && liveStatus === "loading";
   const liveRendererActive = liveViewRequested
     && webglSupport === "supported"
     && liveStatus === "ready";
@@ -736,7 +733,7 @@ export function VehicleCanvas({
         <div className="vc-object" aria-live="polite">
           <div
             className="vc-angle-view"
-            aria-hidden={liveRendererPending || liveRendererActive || currentPreset !== "angle" || currentMode === "blueprint"}
+            aria-hidden={liveRendererActive || currentPreset !== "angle" || currentMode === "blueprint"}
           >
             <LayeredVehicleFrame
               className="vc-angle-view__image"
@@ -751,7 +748,7 @@ export function VehicleCanvas({
 
           <div
             className="vc-profile-view"
-            aria-hidden={liveRendererPending || liveRendererActive || (currentPreset === "angle" && currentMode !== "blueprint")}
+            aria-hidden={liveRendererActive || (currentPreset === "angle" && currentMode !== "blueprint")}
           >
             <LayeredVehicleFrame
               className="vc-profile-view__base"

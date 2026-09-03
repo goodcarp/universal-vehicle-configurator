@@ -8,6 +8,7 @@ import {
   type VehicleHotspotId,
   type VehicleViewPreset,
 } from "../features/vehicle-canvas";
+import { SCENE_MANIFEST } from "../scene/scene-manifest";
 import { activeVehicleModelSource, anchorsFor } from "../scene/vehicle-model-source";
 import { OwnerGuide } from "../owner-guide/OwnerGuide";
 import {
@@ -200,21 +201,30 @@ export function App() {
    * fires the "agent moved the vehicle" notice, so it is claimed as a local
    * change first — the same mechanism the human controls use.
    */
+  const [renderedBody, setRenderedBody] = useState<RenderedBodyDescriptor | null>(null);
   const describeRenderedBody = useCallback((body: RenderedBodyDescriptor) => {
     const current = configuratorPresentation.getState();
     if (!body.canOpen && current.bodyOpen) {
       pendingHumanPresentationRevision.current = current.revision + 1;
     }
+    setRenderedBody(body);
     configuratorPresentation.describeBody(body);
   }, []);
 
   const bodySource = activeVehicleModelSource();
-  const anchors = anchorsFor(bodySource);
+  // Hotspots are markers on a picture, so they follow the picture. On the
+  // authored still they would otherwise sit at the R2's coordinates, on a
+  // differently shaped car, describing a body that is not being drawn.
+  const showingConfiguredBody = renderedBody?.representsConfiguredVehicle ?? false;
+  const anchors = showingConfiguredBody ? anchorsFor(bodySource) : SCENE_MANIFEST.anchors;
+  const hotspotBasis = showingConfiguredBody
+    ? bodySource.hotspotBasis
+    : "the authored still of the licensed reference vehicle";
   const hotspots: VehicleHotspot[] = [
     {
       id: "paint",
       label: "Exterior finish",
-      detail: `${paintOption?.label ?? "Representative finish"} · selection rendered on ${bodySource.hotspotBasis}`,
+      detail: `${paintOption?.label ?? "Representative finish"} · selection rendered on ${hotspotBasis}`,
       anchor: anchors.bodyPaint,
       accuracy: "representative",
     },
@@ -476,6 +486,16 @@ export function App() {
           </div>
         </aside>
         </section>
+
+        {/*
+          The visible notice lives in the Configure rail, which Garage hides —
+          so a build change made by an agent while the person is in the Garage
+          was announced to nobody. This announcer sits outside that subtree and
+          always speaks.
+        */}
+        <p className="visually-hidden" role="status" aria-live="polite">
+          {changeNotice ? `${changeNotice.title}. ${changeNotice.detail}` : ""}
+        </p>
 
         <OwnerGuide active={workspace === "garage"} context={twinContext} />
       </div>
