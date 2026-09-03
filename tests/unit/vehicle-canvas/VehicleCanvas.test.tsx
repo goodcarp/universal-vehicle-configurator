@@ -172,6 +172,24 @@ describe("VehicleCanvas", () => {
     expect(onHotspotChange).toHaveBeenLastCalledWith(null);
   });
 
+  it("reports the authored still, not the requested body, while no renderer is drawing", () => {
+    // jsdom has no WebGL, so this is the same state a judge hits on a machine
+    // that cannot run the live scene. The screen shows an authored still of the
+    // licensed reference — a different car that cannot open its doors — and the
+    // agent surface has to say so rather than name the body that was requested.
+    const onRenderedBodyChange = vi.fn();
+    render(<VehicleCanvas onRenderedBodyChange={onRenderedBodyChange} />);
+
+    expect(onRenderedBodyChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "authored-still",
+        representsConfiguredVehicle: false,
+        canOpen: false,
+      }),
+    );
+    expect(screen.queryByRole("button", { name: /Open body/i })).not.toBeInTheDocument();
+  });
+
   it("supports keyboard pan, blueprint toggle, and reset", () => {
     const onViewportChange = vi.fn();
     render(<VehicleCanvas defaultViewPreset="profile" onViewportChange={onViewportChange} />);

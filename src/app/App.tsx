@@ -32,6 +32,7 @@ import {
 } from "../state";
 import {
   configuratorPresentation,
+  type RenderedBodyDescriptor,
   observeConfiguratorSiteTools,
   registerConfiguratorSiteTools,
   type ConfiguratorSiteToolsStatus,
@@ -76,18 +77,6 @@ export function App() {
   const [presentation, setPresentation] = useState(() => configuratorPresentation.getState());
   const [workspace, setWorkspace] = useState<AutoLabWorkspace>(() => ownerGuideBridge.getWorkspace());
 
-  // Tell the agent surface what the viewport actually mounted. The webmcp layer
-  // deliberately knows nothing about the renderer, so the page reports it.
-  useEffect(() => {
-    const body = activeVehicleModelSource();
-    configuratorPresentation.describeBody({
-      id: body.id,
-      label: body.sceneTitle,
-      representsConfiguredVehicle: body.id !== "licensed-glb",
-      basis: body.credit.text.replace(/^Model:\s*/u, ""),
-      canOpen: body.hasOpenableBody,
-    });
-  }, []);
 
   useEffect(() => ownerGuideBridge.observeWorkspace(setWorkspace), []);
   const [changeNotice, setChangeNotice] = useState<ChangeNotice | null>(null);
@@ -201,6 +190,22 @@ export function App() {
       pendingHumanPresentationRevision.current = null;
     }
     return nextPresentation;
+  }, []);
+
+  /**
+   * Publish what the canvas is really drawing.
+   *
+   * Adopting a body that cannot open shuts the panels, which bumps the
+   * presentation revision. Left unattributed that reads as an agent action and
+   * fires the "agent moved the vehicle" notice, so it is claimed as a local
+   * change first — the same mechanism the human controls use.
+   */
+  const describeRenderedBody = useCallback((body: RenderedBodyDescriptor) => {
+    const current = configuratorPresentation.getState();
+    if (!body.canOpen && current.bodyOpen) {
+      pendingHumanPresentationRevision.current = current.revision + 1;
+    }
+    configuratorPresentation.describeBody(body);
   }, []);
 
   const bodySource = activeVehicleModelSource();
@@ -362,6 +367,7 @@ export function App() {
             bodyOpen={presentation.bodyOpen}
             onBodyOpenChange={(nextBodyOpen) =>
               setPresentationFromUser({ bodyOpen: nextBodyOpen })}
+            onRenderedBodyChange={describeRenderedBody}
             activeHotspotId={activeHotspot}
             hotspots={hotspots}
             onModeChange={(mode) => setPresentationFromUser({ mode })}

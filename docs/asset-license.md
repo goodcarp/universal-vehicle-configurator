@@ -4,7 +4,15 @@ Audit date: 2026-09-01 (America/New_York)
 
 ## Gate result
 
-The shipped primary hero is the **Volvo EX30 2024** GLB distributed
+**Superseded.** This gate was decided when the licensed GLB was the only body
+available. It no longer describes what ships: the default hero in every view is
+now the code-native R2 (`DEFAULT_VEHICLE_MODEL_SOURCE` is `"r2-engineering"`),
+and the licensed GLB is retained only as an authored-still source, a
+no-WebGL fallback, and an opt-in comparison via `?model=licensed-glb`. The
+assessment below is kept because the licence obligations it records still apply
+to that retained asset.
+
+The GLB assessed here is the **Volvo EX30 2024** GLB distributed
 in the OpenX Assets August 2025 release. It is a substantially stronger modern
 crossover mesh than the current code-native model: 4,597,256 bytes, 59,354
 triangles, 15 meshes, separate wheel and light nodes, and named PBR body, glass,
@@ -85,7 +93,8 @@ as a manufacturer-accurate Rivian R2.
 - Same-GLB browser captures cover both the window before the GLB finishes
   loading and the unsupported-WebGL, render-failure, and context-loss paths,
   so the stage is never empty. The live layer fades in over them once the
-  renderer is healthy. No alternate procedural silhouette is mounted.
+  renderer is healthy. The live layer is the code-native R2 by default; the
+  licensed GLB is drawn only when `?model=licensed-glb` is requested.
 - Human controls and Site Tools write to the same configuration and presentation
   state, so agent changes are reflected by the live scene.
 

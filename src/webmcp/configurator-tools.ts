@@ -17,6 +17,7 @@ import {
   ownerGuideBridge,
   type OwnerGuideBridge,
   type VehicleTwinContext,
+  type AutoLabWorkspace,
 } from "../owner-guide/owner-guide-bridge";
 import {
   configuratorMutations,
@@ -45,6 +46,7 @@ export const CONFIGURATOR_TOOL_NAMES = [
   "set_vehicle_twin_view",
   "set_vehicle_twin_motion",
   "measure_vehicle_parts",
+  "set_autolab_workspace",
 ] as const;
 
 export type ConfiguratorToolName = (typeof CONFIGURATOR_TOOL_NAMES)[number];
@@ -176,6 +178,7 @@ const CHARGING_SITUATIONS = [
   "unknown",
 ] as const;
 const USE_CASES = ["road_trip", "towing", "commute", "snow"] as const;
+const AUTOLAB_WORKSPACES = ["configure", "garage"] as const;
 const PRIORITIES = ["range", "delivery", "price", "performance", "comfort"] as const;
 const CROSS_SHOPS = ["model_y", "ioniq_5"] as const;
 const UTILITIES = ["xcel", "unknown"] as const;
@@ -765,6 +768,9 @@ export function createConfiguratorToolDefinitions(
         transaction: transactionState(state),
         presentation: presentation.getState(),
         renderedBody: presentation.getBody(),
+        // Which of the two AutoLab surfaces is on screen. The presentation
+        // tools only move the Configure canvas, so an agent has to know.
+        workspace: bridge.getWorkspace(),
       };
     },
   };
@@ -1645,6 +1651,46 @@ export function createConfiguratorToolDefinitions(
     },
   };
 
+  /**
+   * The way back.
+   *
+   * Three of the twin tools push the page into Garage, which hides the whole
+   * configurator. Without this an agent can enter that surface and never
+   * leave, while presentation tools keep reporting success against a canvas
+   * nobody can see.
+   */
+  const setAutolabWorkspace: ToolDefinition = {
+    name: CONFIGURATOR_TOOL_NAMES[16],
+    title: "Switch AutoLab surface",
+    description:
+      "Show either the Configure surface (build, pricing, paint, wheels, interior) or the Garage digital twin (components, motion, measurement). Inspecting a part, setting a twin view or running a twin motion switches to Garage on its own; this is how you come back. Presentation tools such as present_vehicle_configuration only affect the Configure canvas, so switch back before using them. Read the current surface from get_vehicle_configuration.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string", enum: AUTOLAB_WORKSPACES },
+      },
+      required: ["workspace"],
+      additionalProperties: false,
+    },
+    // Switching surfaces destroys nothing, and asking for the surface you are
+    // already on is a no-op.
+    annotations: { ...SAFE_MUTATION_ANNOTATIONS, idempotentHint: true },
+    execute: (input, options) => {
+      throwIfAborted(options?.signal);
+      const record = assertRecord(input, CONFIGURATOR_TOOL_NAMES[16]);
+      assertOnlyKeys(record, ["workspace"], CONFIGURATOR_TOOL_NAMES[16]);
+      const next = record.workspace;
+      if (typeof next !== "string" || !AUTOLAB_WORKSPACES.includes(next as AutoLabWorkspace)) {
+        throw new TypeError(
+          `${CONFIGURATOR_TOOL_NAMES[16]} requires workspace to be one of ${AUTOLAB_WORKSPACES.join(", ")}.`,
+        );
+      }
+      const previous = bridge.getWorkspace();
+      bridge.setWorkspace(next as AutoLabWorkspace);
+      return { ok: true, changed: previous !== next, workspace: next };
+    },
+  };
+
   const measureVehicleParts: ToolDefinition = {
     name: CONFIGURATOR_TOOL_NAMES[15],
     title: "Measure between vehicle components",
@@ -1696,6 +1742,7 @@ export function createConfiguratorToolDefinitions(
     setVehicleTwinView,
     setVehicleTwinMotion,
     measureVehicleParts,
+    setAutolabWorkspace,
   ];
 }
 

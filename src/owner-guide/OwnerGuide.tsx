@@ -91,10 +91,29 @@ export function OwnerGuide({ active, context }: OwnerGuideProps) {
           title="R2 interactive digital twin and owner guide"
           tabIndex={active ? 0 : -1}
           onLoad={() => {
+            // The load event only says the document arrived. It does not say
+            // the drawing installed its bridge — a Garage that aborts for lack
+            // of WebGL2 still fires it. Claiming "ready" there enables three
+            // controls that then hang until the call times out, and tells an
+            // agent the twin is available when it is not. Ask it something
+            // first; the answer is the readiness signal.
             ownerGuideBridge.markFrameReady();
-            setFrameReady(true);
-            setMessage("Digital twin ready");
-            void sync();
+            setMessage("Digital twin loaded · connecting");
+            void (async () => {
+              try {
+                await ownerGuideBridge.call("get_state");
+                setFrameReady(true);
+                setMessage("Digital twin ready");
+                void sync();
+              } catch (error) {
+                setFrameReady(false);
+                setMessage(
+                  error instanceof Error && error.message
+                    ? `Digital twin did not answer: ${error.message}`
+                    : "Digital twin loaded but is not responding.",
+                );
+              }
+            })();
           }}
         />
       ) : (

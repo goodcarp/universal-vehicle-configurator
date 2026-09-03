@@ -521,6 +521,33 @@ describe("real configurator Site Tools", () => {
     );
   });
 
+  it("can leave the Garage surface it was sent to, and reports which one is showing", async () => {
+    const dependencies = setup();
+    const tools = toolsByName(dependencies);
+
+    // Inspecting a part moves the page to Garage, which hides the whole
+    // configurator. Without a way back an agent is stranded there while the
+    // presentation tools keep reporting success against a canvas nobody sees.
+    const before = await tools.get("get_vehicle_configuration")?.execute({});
+    expect(before).toEqual(expect.objectContaining({ workspace: "configure" }));
+
+    expect(tools.get("set_autolab_workspace")?.execute({ workspace: "garage" }))
+      .toEqual({ ok: true, changed: true, workspace: "garage" });
+    expect(await tools.get("get_vehicle_configuration")?.execute({}))
+      .toEqual(expect.objectContaining({ workspace: "garage" }));
+
+    expect(tools.get("set_autolab_workspace")?.execute({ workspace: "configure" }))
+      .toEqual({ ok: true, changed: true, workspace: "configure" });
+    expect(tools.get("set_autolab_workspace")?.execute({ workspace: "configure" }))
+      .toEqual({ ok: true, changed: false, workspace: "configure" });
+  });
+
+  it("rejects an unknown workspace", () => {
+    expect(() =>
+      toolsByName().get("set_autolab_workspace")?.execute({ workspace: "showroom" }),
+    ).toThrow("requires workspace to be one of configure, garage");
+  });
+
   it("rejects a non-boolean bodyOpen", () => {
     expect(() =>
       toolsByName().get("present_vehicle_configuration")?.execute({ bodyOpen: "yes" }),

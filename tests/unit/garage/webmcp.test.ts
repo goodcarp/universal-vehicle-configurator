@@ -19,21 +19,49 @@ type GarageApi = {
 function part(name: string, label: string, category: string, x: number) {
   const group = new THREE.Group();
   group.position.x = x;
-  group.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1)));
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
+  group.add(mesh);
   return {
     name,
     label,
     category,
     desc: `${label} description`,
     group,
+    meshes: [mesh],
     explode: new THREE.Vector3(x, 0, 0),
+  };
+}
+
+/**
+ * A part whose meshes live somewhere other than its own group.
+ *
+ * The real brakes are built this way — twenty meshes parented into the four
+ * wheel hubs so they steer and turn with the wheel — which leaves the part's
+ * own group empty. Anything that measures the group instead of the meshes
+ * reports nothing for it.
+ */
+function detachedPart(name: string, label: string, category: string, x: number) {
+  const host = new THREE.Group();
+  host.position.x = x;
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4));
+  host.add(mesh);
+  host.updateWorldMatrix(true, true);
+  return {
+    name,
+    label,
+    category,
+    desc: `${label} description`,
+    group: new THREE.Group(),
+    meshes: [mesh],
+    explode: new THREE.Vector3(0, 0, 0),
   };
 }
 
 function setupGarage() {
   const battery = part("battery", "Structural battery", "chassis", 0);
   const body = part("body", "Body shell", "shell", 2);
-  const order = [battery, body];
+  const brakes = detachedPart("brakes", "Brakes", "chassis", 1.4);
+  const order = [battery, body, brakes];
   const st = {
     view: "iso",
     run: true,
@@ -91,10 +119,10 @@ function setupGarage() {
   };
   const vehicle = {
     order,
-    parts: { battery, body },
+    parts: { battery, body, brakes },
     SPEC: { length: 4.715, width: 1.9 },
   };
-  return { st, rig, ui, overlay, setView, motion, select, config, vehicle };
+  return { st, rig, ui, overlay, setView, motion, select, config, vehicle, brakes };
 }
 
 let activeApi: GarageApi | undefined;
@@ -108,6 +136,23 @@ afterEach(() => {
 });
 
 describe("Garage direct WebMCP surface", () => {
+  it("measures a part whose meshes hang off another group", async () => {
+    // The real brakes are parented into the wheel hubs, so their own group is
+    // empty. Measuring the group reports nothing and every tool built on it —
+    // get_part, frame_part, measure — then fails or blames a hidden part.
+    document.modelContext = { registerTool: vi.fn().mockResolvedValue(undefined) };
+    activeApi = installWebMCP(setupGarage()) as GarageApi;
+    await activeApi!.registration;
+    await expect(activeApi!.call("get_part", { part: "brakes" })).resolves.toMatchObject({
+      id: "brakes",
+      bounds_m: { size: { x: expect.any(Number) } },
+    });
+    const measured = await activeApi!.call("measure", { from: "brakes", to: "battery" }) as {
+      distance_m: number;
+    };
+    expect(measured.distance_m).toBeGreaterThan(0);
+  });
+
   it("publishes and functionally exercises all 14 closed, non-destructive tools", async () => {
     const registerTool = vi.fn().mockResolvedValue(undefined);
     document.modelContext = { registerTool };
@@ -149,7 +194,7 @@ describe("Garage direct WebMCP surface", () => {
     await expect(activeApi.call("set_motion", { motion: "lights", on: true })).resolves.toEqual({ motion: "lights", on: true });
     await expect(activeApi.call("set_camera", { elevation_deg: 30, distance_m: 6, orthographic: true })).resolves.toMatchObject({ elevation_deg: 30, distance_m: 6, orthographic: 1 });
     await expect(activeApi.call("orbit_camera", { d_azimuth_deg: 10, zoom: 0.8 })).resolves.toMatchObject({ azimuth_deg: 30 });
-    await expect(activeApi.call("list_parts", { category: "chassis", detail: true })).resolves.toMatchObject({ count: 1, total_count: 2, parts: [{ id: "battery" }] });
+    await expect(activeApi.call("list_parts", { category: "chassis", detail: true })).resolves.toMatchObject({ count: 2, total_count: 3, parts: [{ id: "battery" }, { id: "brakes" }] });
     await expect(activeApi.call("get_part", { part: "Structural battery" })).resolves.toMatchObject({ id: "battery", bounds_m: expect.any(Object) });
     await expect(activeApi.call("frame_part", { part: "battery", margin: 0.5 })).resolves.toMatchObject({ part: "battery", camera: expect.any(Object) });
     await expect(activeApi.call("highlight_part", { part: "body" })).resolves.toEqual({ selected: "body", label: "Body shell" });

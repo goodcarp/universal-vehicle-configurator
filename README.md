@@ -10,7 +10,7 @@ is an interactive technical digital twin for owner guidance, component
 inspection, measurements, openings, exploded views, and service context. The
 same configuration state is synchronized between them.
 
-AutoLab exposes 16 page-defined WebMCP tools. Agents can inspect, simulate,
+AutoLab exposes 17 page-defined WebMCP tools. Agents can inspect, simulate,
 apply, interrupt, undo, price, compare, present, list parts, frame components,
 operate the digital twin, and measure the vehicle while the person remains in
 control.
@@ -24,7 +24,7 @@ returns a shareable permalink for the build it just described.
 The page publishes its tools on `document.modelContext`, falling back to
 `navigator.modelContext`. If the API appears after page load, the page picks it
 up on its own and the header chip switches from **Manual mode** to
-**16 agent tools** without a reload.
+**17 agent tools** without a reload.
 
 **Option A, ChatGPT desktop.** Update to the latest version, then open this
 URL in the app's built-in browser. Ask it to read the current build.
@@ -76,7 +76,7 @@ pnpm test:run
 pnpm build
 ```
 
-## The 16 tools
+## The 17 tools
 
 - read the current build, price, incentives, and revision;
 - list valid options;
@@ -93,10 +93,16 @@ pnpm build
 - reveal, frame, and highlight a component;
 - move among six authored technical views;
 - operate lights, driving motion, shell dissolve, openings, and exploded assembly;
-- measure between named vehicle components in metres.
+- measure between named vehicle components in metres;
+- switch between the Configure surface and the Garage digital twin.
 
-Every mutating tool takes an `expectedRevision` and rejects on conflict, so an
-agent cannot silently overwrite a change the person just made.
+Every tool that changes the **build** — apply a transaction, undo one, set
+buyer context — takes an `expectedRevision` and rejects on conflict, so an
+agent cannot silently overwrite a change the person just made. The
+presentation, digital-twin and workspace tools do not take one: they move the
+camera, the twin or the visible surface, never the configuration. Interrupting
+a running transaction does not take one either, since it is aimed at whatever
+is in flight by definition.
 
 ## Incentives
 

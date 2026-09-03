@@ -106,9 +106,25 @@ export function installWebMCP(ctx) {
     return vehicle.order.find((p) => p.name.toLowerCase() === k
       || p.label.toLowerCase().replace(/[^a-z0-9]/g, '') === k) || null;
   };
+  // Bounds come from the part's own meshes, not from its group.
+  //
+  // A part's group is where the drawing hangs its transform, but not every part
+  // keeps its meshes there: the brakes are one part whose twenty meshes are all
+  // parented into the four wheel hubs so they turn and steer with the wheel.
+  // Measuring the group alone returns an empty box for it, and every tool built
+  // on this — get_part, frame_part, measure — then reports nothing or blames a
+  // hidden part. Unioning the meshes is correct for every part and required for
+  // that one.
   const partBox = (p) => {
-    p.group.updateWorldMatrix(true, true);
-    box.setFromObject(p.group);
+    box.makeEmpty();
+    for (const mesh of p.meshes ?? []) {
+      mesh.updateWorldMatrix(true, false);
+      box.expandByObject(mesh);
+    }
+    if (box.isEmpty()) {
+      p.group.updateWorldMatrix(true, true);
+      box.setFromObject(p.group);
+    }
     if (box.isEmpty()) return null;
     return { min: xyz(box.min), max: xyz(box.max), centre: xyz(box.getCenter(v3)), size: xyz(box.getSize(v3)) };
   };
@@ -263,7 +279,7 @@ export function installWebMCP(ctx) {
     {
       name: 'list_parts',
       title: 'List digital twin parts',
-      description: 'Every named component in the vehicle. category is one of shell (body panels and glass), chassis (battery, subframes, drive units), running (wheels and brakes) or interior. Pass detail:true for bounding boxes in metres.',
+      description: 'Every named component in the vehicle. category is one of shell (body panels and glass), chassis (battery, subframes, drive units), running (the four wheels) or interior; the brakes are a chassis part, carried on the wheel hubs. Pass detail:true for bounding boxes in metres.',
       inputSchema: { type: 'object', properties: { category: { type: 'string', enum: ['shell', 'chassis', 'running', 'interior'] }, detail: { type: 'boolean' } }, additionalProperties: false },
       annotations: READ_ONLY,
       run: ({ category, detail }) => {

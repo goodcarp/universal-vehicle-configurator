@@ -26,6 +26,7 @@ import {
   useState,
 } from "react";
 import { SCENE_MANIFEST, type NormalizedAnchor } from "../../scene/scene-manifest";
+import type { RenderedBodyDescriptor as RenderedBody } from "../../webmcp/configurator-tools";
 import {
   DEFAULT_VEHICLE_MODEL_SOURCE,
   resolveVehicleModelSource,
@@ -99,6 +100,12 @@ export type VehicleCanvasProps = Readonly<{
   /** Doors, frunk and liftgate open. Only offered by bodies that can open. */
   bodyOpen?: boolean;
   onBodyOpenChange?: (bodyOpen: boolean) => void;
+  /**
+   * Reports what is genuinely on screen, so the agent surface can publish it.
+   * Fires whenever that changes — a body is only the body once a renderer is
+   * actually drawing it.
+   */
+  onRenderedBodyChange?: (body: RenderedBody) => void;
   accessories?: VehicleAccessorySelection;
   mode?: VehicleCanvasMode;
   defaultMode?: VehicleCanvasMode;
@@ -272,6 +279,7 @@ export function VehicleCanvas({
   modelSource,
   bodyOpen = false,
   onBodyOpenChange,
+  onRenderedBodyChange,
   accessories = DEFAULT_ACCESSORIES,
   mode,
   defaultMode = "showroom",
@@ -351,8 +359,40 @@ export function VehicleCanvas({
   const modelCredit = activeBody.credit;
   const bodyAnchors = anchorsFor(activeBody);
   const modelTitle = liveRendererActive
-    ? resolveVehicleModelSource(activeModelSource).sceneTitle
+    ? activeBody.sceneTitle
     : "Licensed compact-SUV reference";
+
+  /**
+   * What is actually drawing, not what was requested.
+   *
+   * Until a renderer reports ready — no WebGL, the lazy scene still loading, or
+   * a caught failure — the screen is an authored still of the licensed
+   * reference, which is a different car and cannot open its doors. Publishing
+   * the requested body in that window tells an agent the opposite of the truth,
+   * which is the one thing this descriptor exists to prevent.
+   */
+  const renderedBody = useMemo<RenderedBody>(() => (liveRendererActive
+    ? {
+      id: activeBody.id,
+      label: activeBody.sceneTitle,
+      representsConfiguredVehicle: activeBody.id !== "licensed-glb",
+      basis: activeBody.credit.text.replace(/^Model:\s*/u, ""),
+      canOpen: activeBody.hasOpenableBody,
+    }
+    // A distinct id, not "licensed-glb": the still is not that live source, and
+    // reusing the id would make a deliberate ?model=licensed-glb session
+    // indistinguishable from a renderer that failed.
+    : {
+      id: "authored-still",
+      label: "Licensed compact-SUV reference",
+      representsConfiguredVehicle: false,
+      basis: "Authored still of the licensed compact-SUV reference, not the configured vehicle.",
+      canOpen: false,
+    }), [activeBody, liveRendererActive]);
+
+  useEffect(() => {
+    onRenderedBodyChange?.(renderedBody);
+  }, [onRenderedBodyChange, renderedBody]);
 
   const resolvedHotspots = useMemo<readonly VehicleHotspot[]>(() => hotspots ?? [
     {

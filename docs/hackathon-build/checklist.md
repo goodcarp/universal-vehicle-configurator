@@ -17,11 +17,15 @@ Updated: 2026-09-03
 
 ## Agent surface
 
-- [x] Expose 16 curated AutoLab WebMCP tools for configuration, buyer context,
-  ownership math, comparisons, presentations, parts, motion, and measurement.
+- [x] Expose 17 curated AutoLab WebMCP tools for configuration, buyer context,
+  ownership math, comparisons, presentations, parts, motion, measurement, and
+  switching between the two surfaces.
 - [x] Expose the 14 lower-level drawing tools when Garage is opened directly.
-- [x] Let an agent switch lifecycle surfaces, dissolve the body, frame and
-  highlight a component, open the vehicle, or explode the assembly.
+- [x] Let an agent switch lifecycle surfaces in **both** directions, dissolve
+  the body, frame and highlight a component, open the vehicle, or explode the
+  assembly. Inspecting a part or driving the twin moves to Garage on its own;
+  `set_autolab_workspace` is how an agent returns, and
+  `get_vehicle_configuration` reports which surface is showing.
 - [x] Preserve revision-safe configuration transactions, interruption, undo,
   and shareable URL state.
 - [x] Keep claim provenance and incentive sources in tool responses.
@@ -31,14 +35,22 @@ Updated: 2026-09-03
 - [x] TypeScript passes.
 - [x] ESLint passes; the embedded Garage runtime is treated as a self-contained
   browser artifact and excluded from the host TypeScript lint target.
-- [x] Full suite passes: 115 tests.
-- [x] Focused integration suite passes: 28 tests.
+- [x] Full suite passes: 119 tests.
+- [x] Focused agent-surface suite passes: 31 tests across the host tools, the
+  direct Garage tools, and the bridge between them
+  (`vitest run tests/unit/webmcp tests/unit/garage tests/unit/owner-guide`).
 - [x] Production build completes.
-- [x] Browser-confirm 16 host tools and 14 direct Garage tools.
+- [x] Browser-confirm 17 host tools and 14 direct Garage tools.
 - [x] Browser-confirm the configured Performance R2 context reaches Garage and
   the agent can reveal/frame the structural battery.
-- [ ] Confirm touch orbit, reduced motion, and WebGL fallback on the deployed
-  URL.
+- [x] Confirm touch orbit, reduced motion, and WebGL fallback — verified
+  against the production build served locally, not yet against a deployed
+  host. Touch drag changes the view on phone and tablet, on both the live 3D
+  and the no-WebGL paths; control taps still register. `prefers-reduced-motion`
+  is honoured and reported. Without WebGL the page stops claiming live 3D,
+  names the authored still it is showing instead, keeps the human controls
+  usable, withholds the open-body control, and raises no page errors. No
+  horizontal overflow on either surface at 390, 834, 1440 or 1920 px.
 - [ ] Record the final demo and capture submission screenshots.
 
 ## Final hardening
@@ -60,5 +72,8 @@ Updated: 2026-09-03
   scan.
 - [x] AutoLab is labeled independent, unofficial, and unaffiliated.
 - [x] The optional licensed EX30 reference remains documented and attributed,
-  but is not the default demo identity.
-- [x] Bundled Three.js runtime retains its upstream MIT license header.
+  but is not the default demo identity. The social preview card is the R2, and
+  `docs/asset-license.md` is marked superseded on the point where it still
+  called the GLB the shipped hero.
+- [x] Bundled Three.js runtime retains its upstream MIT license header, and
+  `public/garage/vendor/LICENSE` carries the full text for the directory.
