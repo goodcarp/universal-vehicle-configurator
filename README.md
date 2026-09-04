@@ -134,3 +134,10 @@ endorsed by, or sponsored by Rivian or any manufacturer. The geometry is an
 independent reconstruction, not manufacturer CAD or an official engineering
 release. Vehicle names and specifications are used nominatively to identify
 the products being discussed.
+
+## License
+
+The AutoLab application code is released under the [MIT License](LICENSE).
+Third-party and reference-asset terms are documented separately in
+[docs/asset-license.md](docs/asset-license.md) and alongside the relevant
+files under `public/models/` and `public/garage/vendor/`.
