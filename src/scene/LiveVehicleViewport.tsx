@@ -4,8 +4,11 @@ import {
   Environment,
   Grid,
   Lightformer,
+  MeshReflectorMaterial,
 } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Bloom, EffectComposer, ToneMapping, Vignette } from "@react-three/postprocessing";
+import { ToneMappingMode } from "postprocessing";
 import {
   Component,
   Suspense,
@@ -13,6 +16,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import {
   ACESFilmicToneMapping,
@@ -52,6 +56,9 @@ class LicensedModelBoundary extends Component<
   }
 }
 
+/** Idle turntable: rate in radians per second, the wait before it starts, and how long it runs. */
+const TURNTABLE = { rate: 0.05, delay: 2.4, duration: 48 };
+
 function CameraDirector({
   viewPreset,
   focus,
@@ -60,17 +67,49 @@ function CameraDirector({
   onInteraction,
   reducedMotion,
   cameraRig,
+  turntable,
 }: Pick<
   LiveVehicleViewportProps,
   "viewPreset" | "focus" | "keyboardOrbit" | "resetRevision" | "onInteraction"
   | "reducedMotion"
-> & Readonly<{ cameraRig: CameraRigId }>) {
+> & Readonly<{ cameraRig: CameraRigId; turntable: boolean }>) {
   const controls = useRef<CameraControls>(null);
   const invalidate = useThree((state) => state.invalidate);
   const pose = useMemo(
     () => getCameraPose(viewPreset, focus, keyboardOrbit, cameraRig),
     [cameraRig, focus, keyboardOrbit, viewPreset],
   );
+
+  // A slow turn while nobody is touching it, the way a launch film opens.
+  // It runs on the opening three-quarter only, never under reduced motion,
+  // stops for good at the first touch, and gives up after a while on its own
+  // so an unattended tab is not drawing forever — the viewport renders on
+  // demand, and a turntable is the one thing here that asks for frames.
+  const idle = useRef({ live: true, elapsed: 0 });
+  useEffect(() => {
+    if (!turntable) idle.current.live = false;
+  }, [turntable]);
+  useEffect(() => {
+    if (turntable && !reducedMotion) invalidate();
+  }, [invalidate, reducedMotion, turntable]);
+  useFrame((_, delta) => {
+    const state = idle.current;
+    if (!state.live || !turntable || reducedMotion) return;
+    if (typeof document !== "undefined" && document.hidden) return;
+    state.elapsed += delta;
+    if (state.elapsed > TURNTABLE.delay + TURNTABLE.duration) {
+      state.live = false;
+      return;
+    }
+    if (state.elapsed > TURNTABLE.delay) {
+      controls.current?.rotate(TURNTABLE.rate * Math.min(delta, 0.05), 0, false);
+    }
+    invalidate();
+  });
+  const stopTurntable = () => {
+    idle.current.live = false;
+    onInteraction();
+  };
 
   useEffect(() => {
     const controller = controls.current;
@@ -98,8 +137,55 @@ function CameraDirector({
       azimuthRotateSpeed={0.72}
       polarRotateSpeed={0.62}
       dollyToCursor
-      onStart={onInteraction}
+      onStart={stopTurntable}
     />
+  );
+}
+
+/**
+ * Whether this device gets the full post chain.
+ *
+ * Bloom, the reflective floor and the vignette are two extra passes over the
+ * frame; on a phone that is the difference between a smooth orbit and a
+ * stutter, so a coarse pointer or a narrow viewport gets the plain render.
+ */
+function useFullQuality(): boolean {
+  const [full, setFull] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+    return !window.matchMedia("(pointer: coarse), (max-width: 760px)").matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(pointer: coarse), (max-width: 760px)");
+    const update = () => setFull(!query.matches);
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
+  return full;
+}
+
+/**
+ * The finishing passes.
+ *
+ * Restrained on purpose: bloom only over what is already near white — the
+ * lamps and the light bar — and a vignette that draws the eye in from the
+ * page's off-white. The composer takes tone mapping off the renderer, so the
+ * ACES curve is re-applied here as the last pass; without it the paint
+ * clips to flat white wherever a strip reflects.
+ */
+function Post({ blueprint }: Readonly<{ blueprint: boolean }>) {
+  return (
+    <EffectComposer multisampling={4} enableNormalPass={false}>
+      <Bloom
+        luminanceThreshold={blueprint ? 0.55 : 0.9}
+        luminanceSmoothing={0.14}
+        intensity={blueprint ? 0.9 : 0.5}
+        radius={0.62}
+        mipmapBlur
+      />
+      <Vignette offset={0.26} darkness={blueprint ? 0.55 : 0.34} eskil={false} />
+      <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+    </EffectComposer>
   );
 }
 
@@ -125,7 +211,13 @@ function Studio({
   mode,
   grounded = true,
   shadowKey,
-}: Readonly<{ mode: LiveVehicleRenderMode; grounded?: boolean; shadowKey: string }>) {
+  reflectiveFloor,
+}: Readonly<{
+  mode: LiveVehicleRenderMode;
+  grounded?: boolean;
+  shadowKey: string;
+  reflectiveFloor: boolean;
+}>) {
   // Nothing here casts shadows, so the exterior rig shines straight through the
   // cabin's headliner and flattens it. Inside, drop it to a rim contribution
   // and let CabinInterior's own lights model the room.
@@ -246,13 +338,36 @@ function Studio({
       {grounded && (
       <mesh rotation-x={-Math.PI / 2} position-y={0.015} receiveShadow>
         <circleGeometry args={[7.5, 64]} />
-        <meshStandardMaterial
-          color={blueprint ? "#0c4053" : "#d8d5ca"}
-          roughness={0.82}
-          metalness={0.02}
-          transparent
-          opacity={blueprint ? 0.18 : 0.3}
-        />
+        {reflectiveFloor && !blueprint ? (
+          /*
+            A polished studio floor: a blurred, depth-faded reflection of the
+            sills and the wheels, low enough that the car still sits on the
+            page rather than floating over a mirror.
+          */
+          <MeshReflectorMaterial
+            color="#d6d3c8"
+            roughness={0.72}
+            metalness={0.04}
+            mirror={0.38}
+            mixBlur={1}
+            mixStrength={1.1}
+            blur={[420, 140]}
+            resolution={512}
+            depthScale={0.9}
+            minDepthThreshold={0.8}
+            maxDepthThreshold={1.3}
+            transparent
+            opacity={0.55}
+          />
+        ) : (
+          <meshStandardMaterial
+            color={blueprint ? "#0c4053" : "#d8d5ca"}
+            roughness={0.82}
+            metalness={0.02}
+            transparent
+            opacity={blueprint ? 0.18 : 0.3}
+          />
+        )}
       </mesh>
       )}
       {/*
@@ -288,6 +403,8 @@ function VehicleScene(props: LiveVehicleViewportProps) {
   // A body that models its own cabin stays on screen for the interior view; the
   // stand-in cabin only exists for bodies that are exterior shells.
   const insideCabin = props.viewPreset === "interior" && props.mode === "showroom" && !hasCabin;
+  const fullQuality = useFullQuality();
+  const turntable = props.viewPreset === "angle" && props.focus === null && props.mode === "showroom";
 
   return (
     <>
@@ -295,7 +412,9 @@ function VehicleScene(props: LiveVehicleViewportProps) {
         mode={props.mode}
         grounded={!insideCabin}
         shadowKey={`${props.modelSource ?? "default"}:${props.bodyOpen ?? 0}`}
+        reflectiveFloor={fullQuality}
       />
+      {fullQuality && <Post blueprint={props.mode === "blueprint"} />}
       {/*
         A body that models its own cabin is a closed box once the camera is
         inside it: the studio rig lights the outside of the shell and nothing
@@ -357,6 +476,7 @@ function VehicleScene(props: LiveVehicleViewportProps) {
       <CabinInterior interior={props.interior} visible={insideCabin} />
       <CameraDirector
         cameraRig={cameraRig ?? "reference"}
+        turntable={turntable}
         viewPreset={props.viewPreset}
         focus={props.focus}
         keyboardOrbit={props.keyboardOrbit}
