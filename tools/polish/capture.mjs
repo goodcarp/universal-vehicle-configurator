@@ -69,12 +69,15 @@ for (const shot of selected) {
     await page.waitForSelector('[data-live-status="ready"]', { timeout: 90_000 });
     await page.waitForTimeout(2500);
     const picker = page.getByLabel("Vehicle view presets");
-    await picker.getByRole("button", { name: shot.preset, exact: true }).click();
+    // Under SwiftShader the post chain makes each frame slow enough that
+    // Playwright's stability checks time out, so clicks are forced.
+    const click = { force: true, timeout: 120_000 };
+    await picker.getByRole("button", { name: shot.preset, exact: true }).click(click);
     if (shot.mode) {
-      await page.getByLabel("Vehicle rendering mode").getByRole("button", { name: shot.mode }).click();
+      await page.getByLabel("Vehicle rendering mode").getByRole("button", { name: shot.mode }).click(click);
     }
     if (shot.open) {
-      await page.getByRole("button", { name: "Open body" }).click();
+      await page.getByRole("button", { name: "Open body" }).click(click);
     }
     await page.waitForTimeout(shot.open ? 3000 : 1800);
     const stage = page.locator('[aria-label="Interactive vehicle configurator"]');

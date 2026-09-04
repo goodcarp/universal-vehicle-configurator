@@ -87,12 +87,12 @@ const PAINT_DEFAULT: Omit<PaintSpec, "color"> = {
 const PAINT_SPECS: Record<string, Partial<PaintSpec> & { color: string }> = {
   // Warm silver: high metallic, most of its colour is the studio.
   "paint.esker_silver": {
-    color: "#a9a6a0",
-    metalness: 0.88,
-    roughness: 0.34,
+    color: "#c0bdb8",
+    metalness: 0.86,
+    roughness: 0.33,
     flake: 0.09,
-    envMapIntensity: 1.55,
-    specularColor: "#fff2df",
+    envMapIntensity: 1.75,
+    specularColor: "#fff6ea",
   },
   // Pearl white: a dielectric coat with a faint thin-film flop, and the env
   // held down so a white flank never blows out under the strips.

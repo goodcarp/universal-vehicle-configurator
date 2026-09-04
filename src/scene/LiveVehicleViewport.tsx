@@ -24,7 +24,7 @@ import {
   SRGBColorSpace,
 } from "three";
 import { getCameraPose, type CameraRigId } from "./camera-presets";
-import { createCycloramaTexture } from "./studio-backdrop";
+import { createCycloramaTexture, createFloorFalloffTexture } from "./studio-backdrop";
 import { CabinInterior } from "./CabinInterior";
 import { resolveVehicleModelSource } from "./vehicle-model-source";
 import type {
@@ -225,6 +225,8 @@ function Studio({
   const blueprint = mode === "blueprint";
   const cyclorama = useMemo(() => createCycloramaTexture(), []);
   useEffect(() => () => cyclorama.dispose(), [cyclorama]);
+  const falloff = useMemo(() => createFloorFalloffTexture(), []);
+  useEffect(() => () => falloff.dispose(), [falloff]);
   return (
     <>
       <ambientLight intensity={(blueprint ? 0.48 : 0.34) * rig} color={blueprint ? "#a7efff" : "#eef4ef"} />
@@ -345,19 +347,20 @@ function Studio({
             page rather than floating over a mirror.
           */
           <MeshReflectorMaterial
-            color="#d6d3c8"
-            roughness={0.72}
+            color="#e3e0d6"
+            roughness={0.7}
             metalness={0.04}
-            mirror={0.38}
+            mirror={0.42}
             mixBlur={1}
-            mixStrength={1.1}
+            mixStrength={1.2}
             blur={[420, 140]}
             resolution={512}
             depthScale={0.9}
             minDepthThreshold={0.8}
             maxDepthThreshold={1.3}
+            alphaMap={falloff}
             transparent
-            opacity={0.55}
+            opacity={0.62}
           />
         ) : (
           <meshStandardMaterial
@@ -517,7 +520,7 @@ export function LiveVehicleViewport(props: LiveVehicleViewportProps) {
         onCreated={({ gl }) => {
           gl.outputColorSpace = SRGBColorSpace;
           gl.toneMapping = ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.16;
+          gl.toneMappingExposure = 1.24;
           gl.setClearColor(0x000000, 0);
         }}
       >
