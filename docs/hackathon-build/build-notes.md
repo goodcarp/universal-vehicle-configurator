@@ -55,8 +55,8 @@ vehicle identity.
 
 ## Remaining submission work
 
-Deployment, deployed-device fallback checks, the recorded demo, and Devpost
-submission assets remain separate final-mile tasks.
+Deployed-device fallback checks, the recorded demo, and Devpost submission
+assets remain separate final-mile tasks.
 
 ## Challenge release candidate — 2026-09-04
 
@@ -65,15 +65,17 @@ submission assets remain separate final-mile tasks.
 - Carried over compatible tail-light classification, deep-link card-state, and
   optional-PBR failure-isolation fixes while preserving AutoLab's lifecycle,
   performance, touch, and WebMCP integration work.
-- Added a root MIT license and a GitHub Pages release workflow. Publication is
-  intentionally waiting for explicit approval because it changes the source
-  repository from private to public.
+- Added a root MIT license and a GitHub Pages release workflow. With explicit
+  participant approval, the single unified repository was made public and the
+  combined Configure/Garage app was deployed from `main`.
 - Re-ran ESLint, strict TypeScript, all 120 tests, model parity, and the
   production build successfully. The calibrated visual self-test passed 8/8;
   the reduced-motion, no-WebGL, touch, pinch, control-target, and responsive
   layout matrix passed 26/26 against the isolated local production preview.
-- Remaining release gates: public deployment verification, the final demo
-  recording, submission screenshots, and the confirmed Devpost submission.
+- Verified the public site, the code-native R2 render, the Configure → Garage
+  bridge, all 17 host tools, and all 14 direct Garage tools. Remaining release
+  gates are the final demo recording, submission screenshots, and confirmed
+  Devpost submission.
 
 ## Final hardening — WebMCP contract
 
