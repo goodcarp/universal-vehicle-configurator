@@ -81,7 +81,7 @@ for (const shot of selected) {
     }
     await page.waitForTimeout(shot.open ? 3000 : 1800);
     const stage = page.locator('[aria-label="Interactive vehicle configurator"]');
-    await stage.screenshot({ path: resolve(outDir, `${prefix}-${shot.name}.png`) });
+    await stage.screenshot({ path: resolve(outDir, `${prefix}-${shot.name}.png`), timeout: 240_000 });
     const readout = await page.locator(".vc-selection-readout").innerText().catch(() => "");
     log.push({ shot: shot.name, ok: true, readout, ms: Date.now() - started, errors: [...errors] });
   } catch (error) {

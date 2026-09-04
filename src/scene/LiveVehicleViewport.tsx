@@ -406,7 +406,10 @@ function VehicleScene(props: LiveVehicleViewportProps) {
   // A body that models its own cabin stays on screen for the interior view; the
   // stand-in cabin only exists for bodies that are exterior shells.
   const insideCabin = props.viewPreset === "interior" && props.mode === "showroom" && !hasCabin;
-  const fullQuality = useFullQuality();
+  // The cabin view gets the plain render: with the composer and the
+  // reflector in the chain the cabin came out black under its fill lights,
+  // and there is nothing for bloom or a floor reflection to do from inside.
+  const fullQuality = useFullQuality() && props.viewPreset !== "interior";
   const turntable = props.viewPreset === "angle" && props.focus === null && props.mode === "showroom";
 
   return (
