@@ -34,8 +34,113 @@ function toolsByName(dependencies = setup()) {
 describe("real configurator Site Tools", () => {
   afterEach(() => {
     delete document.modelContext;
+    delete navigator.modelContext;
     delete document.documentElement.dataset.siteTools;
     resetConfiguratorSiteToolsForTests();
+    vi.useRealTimers();
+  });
+
+  it("installs the complete mirror synchronously without WebMCP and retains it after the watch", async () => {
+    vi.useFakeTimers();
+    const registration = registerConfiguratorSiteTools(setup());
+    const mirror = window.autolab!;
+    expect(mirror.tools.map((tool) => tool.name)).toEqual(CONFIGURATOR_TOOL_NAMES);
+    expect(mirror.registered).toBe(false);
+    expect(mirror.api).toBeNull();
+    expect(mirror.activity()).toEqual([]);
+    await registration;
+    await vi.advanceTimersByTimeAsync(12_001);
+    expect(window.autolab).toBe(mirror);
+    expect(mirror.registered).toBe(false);
+    expect(mirror.get_vehicle_configuration()).toMatchObject({ ok: true, revision: 1 });
+  });
+
+  it("mirrors the exact registered declarations and executes the same results and validation", async () => {
+    const registered: ModelContextTool[] = [];
+    document.modelContext = { registerTool: vi.fn(async (tool) => { registered.push(tool); }) };
+    const dependencies = setup();
+    const pending = registerConfiguratorSiteTools(dependencies);
+    expect(window.autolab!.registered).toBe(false);
+    await pending;
+    const mirror = window.autolab!;
+    expect(mirror.registered).toBe(true);
+    expect(mirror.api).toBe("document.modelContext");
+    expect(mirror.tools).toEqual(registered.map(({ name, title, description, inputSchema, annotations }) => (
+      { name, title, description, inputSchema, annotations }
+    )));
+    for (const name of CONFIGURATOR_TOOL_NAMES) expect(mirror[name]).toBeTypeOf("function");
+    const read = registered[0];
+    expect(mirror.call(read.name, {})).toEqual(read.execute({}));
+    expect(mirror.get_vehicle_configuration()).toEqual(read.execute({}));
+    const args = { bodyOpen: true };
+    const present = registered.find((tool) => tool.name === "present_vehicle_configuration")!;
+    const execute = vi.spyOn(present, "execute");
+    expect(mirror.call(present.name, args)).toMatchObject({ ok: true, presentation: { bodyOpen: true } });
+    expect(execute).toHaveBeenCalledWith(args);
+    expect(dependencies.presentation.getState().bodyOpen).toBe(true);
+    expect(() => mirror.call(read.name, { extra: true })).toThrow("unsupported field: extra");
+    expect(() => mirror.call("missing")).toThrow(`Available: ${CONFIGURATOR_TOOL_NAMES.join(", ")}`);
+    expect(() => mirror.call("toString")).toThrow("Unknown tool");
+    unregisterConfiguratorSiteTools();
+    expect(mirror.registered).toBe(false);
+    expect(mirror.api).toBeNull();
+  });
+
+  it("upgrades the same mirror on late navigator injection without double registration", async () => {
+    vi.useFakeTimers();
+    const dependencies = setup();
+    await registerConfiguratorSiteTools(dependencies);
+    const mirror = window.autolab;
+    const registerTool = vi.fn().mockResolvedValue(undefined);
+    navigator.modelContext = { registerTool };
+    document.dispatchEvent(new Event("modelcontextchange"));
+    window.dispatchEvent(new Event("modelcontext"));
+    await vi.advanceTimersByTimeAsync(800);
+    await registerConfiguratorSiteTools(dependencies);
+    expect(window.autolab).toBe(mirror);
+    expect(mirror?.registered).toBe(true);
+    expect(mirror?.api).toBe("navigator.modelContext");
+    expect(registerTool).toHaveBeenCalledTimes(17);
+  });
+
+  it("cancels an old late-injection watcher on teardown", async () => {
+    vi.useFakeTimers();
+    await registerConfiguratorSiteTools(setup());
+    unregisterConfiguratorSiteTools();
+    const registerTool = vi.fn().mockResolvedValue(undefined);
+    document.modelContext = { registerTool };
+    await registerConfiguratorSiteTools(setup());
+    await vi.advanceTimersByTimeAsync(12_001);
+    expect(registerTool).toHaveBeenCalledTimes(17);
+    expect(window.autolab!.registered).toBe(true);
+  });
+
+  it("records every dispatch once, retains 20 entries, and hides private argument values", async () => {
+    const registered: ModelContextTool[] = [];
+    document.modelContext = { registerTool: vi.fn(async (tool) => { registered.push(tool); }) };
+    await registerConfiguratorSiteTools(setup());
+    const mirror = window.autolab!;
+    mirror.present_vehicle_configuration({ bodyOpen: true });
+    expect(mirror.activity()).toEqual([expect.objectContaining({
+      tool: "present_vehicle_configuration", argsSummary: "bodyOpen:true", ok: true,
+      ms: expect.any(Number), at: expect.any(String),
+    })]);
+    registered[0].execute({});
+    expect(mirror.activity()).toHaveLength(2);
+    expect(() => mirror.present_vehicle_configuration({})).toThrow("requires a presentation change");
+    expect(mirror.activity().at(-1)).toMatchObject({ ok: false, error: expect.stringContaining("requires a presentation change") });
+    await expect(mirror.apply_vehicle_configuration_transaction({})).rejects.toThrow("expectedRevision");
+    expect(mirror.activity().at(-1)?.ok).toBe(false);
+    mirror.set_vehicle_buyer_context({ expectedRevision: 1, patch: { state: "CO", financing: true } });
+    expect(mirror.activity().at(-1)?.argsSummary).toBe("expectedRevision · patch:{state,financing}");
+    mirror.undo_vehicle_configuration_transaction({ expectedRevision: 1 });
+    expect(mirror.activity().at(-1)).toMatchObject({ ok: false, error: expect.any(String) });
+    const snapshot = mirror.activity();
+    snapshot[0].tool = "tampered";
+    expect(mirror.activity()[0].tool).toBe("present_vehicle_configuration");
+    for (let i = 0; i < 21; i++) mirror.get_vehicle_configuration();
+    expect(mirror.activity()).toHaveLength(20);
+    expect(mirror.activity().every((entry) => entry.tool === "get_vehicle_configuration" && entry.ok)).toBe(true);
   });
 
   it("registers the full Tier-1 surface once with one shared lifecycle signal", async () => {
@@ -89,6 +194,9 @@ describe("real configurator Site Tools", () => {
     const signal = registerTool.mock.calls[0][1].signal as AbortSignal;
     expect(signal.aborted).toBe(true);
     expect(document.documentElement.dataset.siteTools).toBe("degraded");
+    expect(window.autolab!.registered).toBe(false);
+    expect(window.autolab!.api).toBeNull();
+    expect(window.autolab!.get_vehicle_configuration()).toMatchObject({ ok: true });
   });
 
   it("exposes closed schemas and truthful read tools against the live store", async () => {

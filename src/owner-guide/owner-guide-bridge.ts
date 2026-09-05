@@ -1,3 +1,5 @@
+import { trackToolExecution } from "../webmcp/tool-activity";
+
 export type AutoLabWorkspace = "configure" | "garage";
 
 export type VehicleTwinTool =
@@ -238,13 +240,13 @@ export function createOwnerGuideBridge(
       callOptions: VehicleTwinCallOptions = {},
     ) {
       if (callOptions.reveal) bridge.setWorkspace("garage");
-      return callTwin<T>(tool, args, callOptions.signal);
+      return trackToolExecution(tool, args, () => callTwin<T>(tool, args, callOptions.signal));
     },
     async syncContext(
       context: VehicleTwinContext,
       syncOptions: Pick<VehicleTwinCallOptions, "signal"> = {},
     ) {
-      return callTwin("set_vehicle_context", context, syncOptions.signal);
+      return trackToolExecution("set_vehicle_context", context, () => callTwin("set_vehicle_context", context, syncOptions.signal));
     },
   };
 
