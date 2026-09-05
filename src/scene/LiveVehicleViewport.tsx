@@ -135,20 +135,31 @@ function Studio({
   useEffect(() => () => cyclorama.dispose(), [cyclorama]);
   return (
     <>
-      <ambientLight intensity={(blueprint ? 0.48 : 0.34) * rig} color={blueprint ? "#a7efff" : "#eef4ef"} />
+      <ambientLight intensity={(blueprint ? 0.48 : 0.12) * rig} color={blueprint ? "#a7efff" : "#eef4ef"} />
       <directionalLight
         position={[4.5, 7.5, 5.5]}
-        intensity={(blueprint ? 0.72 : 1.5) * rig}
+        intensity={(blueprint ? 0.72 : 2.4) * rig}
+        castShadow={!blueprint && grounded}
+        shadow-mapSize={[2048, 2048]}
+        shadow-camera-left={-4}
+        shadow-camera-right={4}
+        shadow-camera-top={4}
+        shadow-camera-bottom={-4}
+        shadow-camera-near={0.5}
+        shadow-camera-far={18}
+        shadow-bias={-0.00015}
+        shadow-normalBias={0.018}
+        shadow-radius={3}
         color={blueprint ? "#b8f4ff" : "#fff4dd"}
       />
       <directionalLight
         position={[-5.5, 3.2, -3.8]}
-        intensity={(blueprint ? 1.05 : 0.82) * rig}
+        intensity={(blueprint ? 1.05 : 0.45) * rig}
         color={blueprint ? "#43bed9" : "#b9dfd8"}
       />
       <spotLight
         position={[0, 7, -2.5]}
-        intensity={(blueprint ? 8 : 18) * rig}
+        intensity={(blueprint ? 8 : 10) * rig}
         angle={0.62}
         penumbra={0.9}
         distance={16}
@@ -163,7 +174,7 @@ function Studio({
         produce the streak that runs the whole shoulder line and reads as
         polished paint rather than coloured plastic.
       */}
-      <Environment resolution={256} background={false}>
+      <Environment resolution={512} background={false}>
         <mesh scale={38}>
           <sphereGeometry args={[1, 32, 20]} />
           {blueprint ? (
@@ -177,34 +188,34 @@ function Studio({
           <Lightformer
             key={`strip-${z}`}
             form="rect"
-            intensity={z === 0 ? 5.2 : 3.4}
+            intensity={z === 0 ? 3.2 : 2.0}
             color="#fff6e6"
             position={[0, 6.4, z * 1.9]}
             rotation-x={Math.PI / 2}
-            scale={[9.5, 0.55, 1]}
+            scale={[8, z === 0 ? 1.7 : 0.65, 1]}
           />
         ))}
         {/* Side boxes: the vertical gradient that gives the flanks their form. */}
         <Lightformer
           form="rect"
-          intensity={2.5}
+          intensity={1.8}
           color="#f2f7ff"
           position={[0.4, 3.1, 6.6]}
           target={[0, 1, 0]}
-          scale={[8, 3.4, 1]}
+          scale={[7, 2.2, 1]}
         />
         <Lightformer
           form="rect"
-          intensity={1.5}
+          intensity={0.85}
           color="#cfe2e0"
           position={[-0.6, 2.9, -6.6]}
           target={[0, 1, 0]}
-          scale={[8, 3.2, 1]}
+          scale={[6, 1.8, 1]}
         />
         {/* Kickers: separate the nose and tail from the ground plane. */}
         <Lightformer
           form="rect"
-          intensity={2.9}
+          intensity={1.6}
           color="#fff2dd"
           position={[7.6, 2.2, 1.6]}
           target={[0, 0.9, 0]}
@@ -212,7 +223,7 @@ function Studio({
         />
         <Lightformer
           form="rect"
-          intensity={2.1}
+          intensity={1.1}
           color="#e6f2ff"
           position={[-7.4, 2.0, -1.4]}
           target={[0, 0.9, 0]}
@@ -243,35 +254,27 @@ function Studio({
           infiniteGrid={false}
         />
       )}
-      {grounded && (
-      <mesh rotation-x={-Math.PI / 2} position-y={0.015} receiveShadow>
-        <circleGeometry args={[7.5, 64]} />
-        <meshStandardMaterial
-          color={blueprint ? "#0c4053" : "#d8d5ca"}
-          roughness={0.82}
-          metalness={0.02}
-          transparent
-          opacity={blueprint ? 0.18 : 0.3}
-        />
-      </mesh>
+      {grounded && !blueprint && (
+        <mesh rotation-x={-Math.PI / 2} position-y={-0.012} receiveShadow>
+          <planeGeometry args={[160, 160]} />
+          <meshStandardMaterial color="#c5c6c3" metalness={0.12} roughness={0.78} />
+        </mesh>
       )}
       {/*
-        Captured once per silhouette rather than every frame. Redrawing it
-        continuously costs a second pass over the whole body for a shadow that
-        only changes when the body does — but it does change when a door swings,
-        so the key carries whatever alters the outline.
+        Refresh with demand frames so shadows follow the animated panels.
+        The canvas stays idle once the camera and doors settle.
       */}
       {grounded && (
       <ContactShadows
         key={shadowKey}
-        frames={1}
-        position={[0, 0.025, 0]}
+        frames={Infinity}
+        position={[0, -0.008, 0]}
         scale={8.5}
-        opacity={blueprint ? 0.2 : 0.47}
-        blur={1.75}
+        opacity={blueprint ? 0.2 : 0.65}
+        blur={2.4}
         far={2.8}
-        resolution={256}
-        color="#1b2620"
+        resolution={512}
+        color="#202426"
       />
       )}
     </>
@@ -291,6 +294,10 @@ function VehicleScene(props: LiveVehicleViewportProps) {
 
   return (
     <>
+      {props.mode === "showroom" && !insideCabin && <>
+        <color attach="background" args={["#dddedb"]} />
+        <fog attach="fog" args={["#dddedb", 12, 35]} />
+      </>}
       <Studio
         mode={props.mode}
         grounded={!insideCabin}
@@ -385,7 +392,8 @@ export function LiveVehicleViewport(props: LiveVehicleViewportProps) {
           near: 0.1,
           far: 60,
         }}
-        dpr={[1, 1.5]}
+        dpr={[1, 2]}
+        shadows="soft"
         frameloop="demand"
         gl={{
           alpha: true,
@@ -397,7 +405,7 @@ export function LiveVehicleViewport(props: LiveVehicleViewportProps) {
         onCreated={({ gl }) => {
           gl.outputColorSpace = SRGBColorSpace;
           gl.toneMapping = ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.16;
+          gl.toneMappingExposure = 0.95;
           gl.setClearColor(0x000000, 0);
         }}
       >

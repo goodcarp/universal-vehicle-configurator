@@ -81,6 +81,7 @@ export function R2VehicleModel({
   // Parented here rather than inside dressForShowroom: attaching during render
   // leaves a group hanging off the drawing for every render React discards.
   useEffect(() => {
+    showroom.applyMaterials();
     vehicle.body.add(showroom.detail);
     invalidate();
     return () => {
