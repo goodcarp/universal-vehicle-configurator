@@ -4,7 +4,10 @@ import { getToolActivity, observeToolActivity, type ToolActivity } from "../webm
 const DISPLAY_MS = 4_000;
 
 export function ToolActivityStrip() {
-  const [latest, setLatest] = useState<ToolActivity | null>(() => getToolActivity().at(-1) ?? null);
+  const [latest, setLatest] = useState<ToolActivity | null>(() => {
+    const entry = getToolActivity().at(-1);
+    return entry && Date.now() - Date.parse(entry.at) < DISPLAY_MS ? entry : null;
+  });
   const [expired, setExpired] = useState<ToolActivity | null>(null);
   useEffect(() => observeToolActivity(setLatest), []);
   useEffect(() => {
@@ -13,9 +16,10 @@ export function ToolActivityStrip() {
     const timer = window.setTimeout(() => setExpired(latest), remaining);
     return () => window.clearTimeout(timer);
   }, [latest]);
-  const text = latest && latest !== expired
+  const summary = latest && latest !== expired
     ? ["AGENT", latest.tool, latest.argsSummary, latest.ok ? "ok" : `error: ${latest.error}`, `${latest.ms} ms`].filter(Boolean).join(" · ")
     : "";
+  const text = latest && !latest.ok && summary.length > 160 ? `${summary.slice(0, 159)}…` : summary;
   return (
     <div className="tool-activity-strip" role="status" aria-live="polite" aria-atomic="true"
       data-active={Boolean(text) || undefined} data-ok={latest?.ok} title={text || undefined}>

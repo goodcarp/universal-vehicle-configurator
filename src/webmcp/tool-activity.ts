@@ -21,13 +21,14 @@ const PUBLIC_SWITCHES = new Set(["bodyOpen", "on", "visible", "detail", "annotat
 
 function summarize(tool: string, args: unknown): string {
   if (!isRecord(args)) return "invalid arguments";
-  return Object.entries(args).map(([key, value]) => {
+  const summary = Object.entries(args).map(([key, value]) => {
     if (tool !== "set_vehicle_buyer_context" && PUBLIC_SWITCHES.has(key) && typeof value === "boolean") {
       return `${key}:${value}`;
     }
     if (isRecord(value)) return `${key}:{${Object.keys(value).join(",")}}`;
     return key;
   }).join(" · ");
+  return summary.length > 120 ? `${summary.slice(0, 119)}…` : summary;
 }
 
 function message(error: unknown): string {
@@ -70,7 +71,9 @@ export function trackToolExecution<T>(tool: string, args: unknown, execute: () =
   const failure = (error: unknown): never => { finish(false, error); throw error; };
   try {
     const result = execute();
-    if (result instanceof Promise) return result.then(success, failure) as T;
+    if (typeof (result as PromiseLike<unknown> | null | undefined)?.then === "function") {
+      return Promise.resolve(result).then(success, failure) as T;
+    }
     success(result);
     return result;
   } catch (error) {

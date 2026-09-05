@@ -1,18 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import catalogData from "../../../src/data/catalogs/r2.catalog.json";
 import type { Catalog } from "../../../src/domain/catalog.types";
-import type { OwnerGuideBridge } from "../../../src/owner-guide/owner-guide-bridge";
+import { createOwnerGuideBridge, type OwnerGuideBridge } from "../../../src/owner-guide/owner-guide-bridge";
 import { createConfiguratorStore } from "../../../src/state/configurator.store";
 import { createMutationService } from "../../../src/state/mutation.service";
 import {
   CONFIGURATOR_TOOL_NAMES,
   createConfiguratorPresentationController,
   createConfiguratorToolDefinitions,
+  getConfiguratorSiteToolsStatus,
+  observeConfiguratorSiteTools,
   registerConfiguratorSiteTools,
   resetConfiguratorSiteToolsForTests,
   unregisterConfiguratorSiteTools,
   type ConfiguratorToolsDependencies,
 } from "../../../src/webmcp/configurator-tools";
+
+import { getToolActivity, observeToolActivity } from "../../../src/webmcp/tool-activity";
 
 const catalog = catalogData as unknown as Catalog;
 
@@ -168,6 +172,81 @@ describe("real configurator Site Tools", () => {
 
     unregisterConfiguratorSiteTools();
     expect(signals[0].aborted).toBe(true);
+  });
+
+  it.each([false, true])("does not publish stale readiness after teardown during the last registration (replacement: %s)", async (replace) => {
+    let finishLast!: () => void;
+    document.modelContext = { registerTool: vi.fn((tool) => {
+      if (tool.name === CONFIGURATOR_TOOL_NAMES.at(-1)) {
+        return new Promise<void>((resolve) => { finishLast = resolve; });
+      }
+      return Promise.resolve();
+    }) };
+    const statuses = vi.fn();
+    const stop = observeConfiguratorSiteTools(statuses);
+    try {
+      const pending = registerConfiguratorSiteTools(setup());
+      const oldMirror = window.autolab!;
+      await vi.waitFor(() => expect(finishLast).toBeTypeOf("function"));
+      unregisterConfiguratorSiteTools();
+      if (replace) {
+        document.modelContext = { registerTool: vi.fn().mockResolvedValue(undefined) };
+        await registerConfiguratorSiteTools(setup());
+      }
+      const status = getConfiguratorSiteToolsStatus();
+      statuses.mockClear();
+      finishLast();
+      await expect(pending).resolves.toEqual({ state: "unsupported", toolNames: [] });
+      expect(statuses).not.toHaveBeenCalled();
+      expect(getConfiguratorSiteToolsStatus()).toBe(status);
+      expect(oldMirror.registered).toBe(replace);
+      expect(oldMirror.api).toBe(replace ? "document.modelContext" : null);
+      if (replace) expect(window.autolab).not.toBe(oldMirror);
+      else expect(window.autolab).toBeUndefined();
+    } finally {
+      stop();
+    }
+  });
+
+  it.each([true, false])("records one activity and observer notification for a real twin tool (success: %s)", async (ok) => {
+    const dependencies = setup();
+    const bridge = createOwnerGuideBridge({ frameTimeoutMs: 500 });
+    dependencies.ownerGuide = bridge;
+    const frame = document.createElement("iframe");
+    document.body.append(frame);
+    Object.defineProperty(frame.contentDocument, "URL", {
+      configurable: true,
+      value: `${window.location.origin}/garage/`,
+    });
+    bridge.bindFrame(frame);
+    bridge.markFrameReady();
+    const target = frame.contentWindow!;
+    const observer = vi.fn();
+    const stop = observeToolActivity(observer);
+    const postMessage = vi.spyOn(target, "postMessage").mockImplementation((message) => {
+      const request = message as { id: string; tool: string };
+      window.dispatchEvent(new MessageEvent("message", {
+        source: target,
+        origin: window.location.origin,
+        data: {
+          source: "r2-blueprint-result", id: request.id,
+          ok: ok || request.tool !== "set_view",
+          result: { view: "side" }, error: "Twin unavailable",
+        },
+      }));
+    });
+    try {
+      const result = toolsByName(dependencies).get("set_vehicle_twin_view")!.execute({ view: "side", annotationsVisible: true });
+      if (ok) await expect(result).resolves.toMatchObject({ ok: true });
+      else await expect(result).rejects.toThrow("Twin unavailable");
+      expect(postMessage).toHaveBeenCalledTimes(ok ? 3 : 2);
+      expect(getToolActivity()).toEqual([expect.objectContaining({ tool: "set_vehicle_twin_view", ok })]);
+      expect(observer).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ tool: "set_vehicle_twin_view", ok }));
+    } finally {
+      stop();
+      postMessage.mockRestore();
+      frame.remove();
+    }
   });
 
   it("keeps the manual configurator available when Site Tools are unsupported", async () => {

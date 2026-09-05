@@ -780,11 +780,11 @@ export function createConfiguratorToolDefinitions(
   const synchronizeTwin = async (toolName: ConfiguratorToolName, signal?: AbortSignal) => {
     const state = store.getState();
     const context = vehicleTwinContext(state);
-    await bridge.syncContext(context, { signal });
+    await bridge.syncContext(context, { signal, trackActivity: false });
     throwIfAborted(signal);
     const latest = store.getState();
     if (latest.domain.revision !== state.domain.revision) {
-      await bridge.syncContext(vehicleTwinContext(latest), { signal });
+      await bridge.syncContext(vehicleTwinContext(latest), { signal, trackActivity: false });
       throw new Error(
         `${toolName} stopped because the configuration moved from revision ${state.domain.revision} to ${latest.domain.revision} while Garage was loading. Retry against the current build.`,
       );
@@ -1484,7 +1484,7 @@ export function createConfiguratorToolDefinitions(
       const twin = await bridge.call<Record<string, unknown>>(
         "get_state",
         {},
-        { signal: options?.signal },
+        { signal: options?.signal, trackActivity: false },
       );
       assertTwinRevision(state.domain.revision, CONFIGURATOR_TOOL_NAMES[10]);
       return { ok: true, revision: state.domain.revision, context, twin };
@@ -1524,7 +1524,7 @@ export function createConfiguratorToolDefinitions(
           ...(record.category === undefined ? {} : { category: record.category }),
           detail: record.detail ?? false,
         },
-        { signal: options?.signal },
+        { signal: options?.signal, trackActivity: false },
       );
       assertTwinRevision(state.domain.revision, toolName);
       return { ok: true, revision: state.domain.revision, ...result };
@@ -1577,14 +1577,14 @@ export function createConfiguratorToolDefinitions(
       const part = await bridge.call<{ id: string; label: string; category: string }>(
         "get_part",
         { part: partName },
-        { signal: options?.signal },
+        { signal: options?.signal, trackActivity: false },
       );
       assertTwinRevision(state.domain.revision, toolName);
       if (part.category !== "shell" && record.revealUnderBody !== false) {
         await bridge.call(
           "set_motion",
           { motion: "panels", on: true },
-          { signal: options?.signal },
+          { signal: options?.signal, trackActivity: false },
         );
         assertTwinRevision(state.domain.revision, toolName);
       }
@@ -1596,13 +1596,13 @@ export function createConfiguratorToolDefinitions(
           ...(elevationDeg === undefined ? {} : { elevation_deg: elevationDeg }),
           ...(margin === undefined ? {} : { margin }),
         },
-        { signal: options?.signal },
+        { signal: options?.signal, trackActivity: false },
       );
       assertTwinRevision(state.domain.revision, toolName);
       await bridge.call(
         "highlight_part",
         { part: partName },
-        { signal: options?.signal },
+        { signal: options?.signal, trackActivity: false },
       );
       assertTwinRevision(state.domain.revision, toolName);
       return {
@@ -1646,14 +1646,14 @@ export function createConfiguratorToolDefinitions(
       const view = await bridge.call<Record<string, unknown>>(
         "set_view",
         { view: record.view },
-        { signal: options?.signal },
+        { signal: options?.signal, trackActivity: false },
       );
       assertTwinRevision(state.domain.revision, toolName);
       if (record.annotationsVisible !== undefined) {
         await bridge.call(
           "set_annotations",
           { visible: record.annotationsVisible },
-          { signal: options?.signal },
+          { signal: options?.signal, trackActivity: false },
         );
         assertTwinRevision(state.domain.revision, toolName);
       }
@@ -1695,7 +1695,7 @@ export function createConfiguratorToolDefinitions(
           motion: record.motion,
           ...(record.on === undefined ? {} : { on: record.on }),
         },
-        { signal: options?.signal },
+        { signal: options?.signal, trackActivity: false },
       );
       assertTwinRevision(state.domain.revision, toolName);
       return { ok: true, revision: state.domain.revision, workspace: bridge.getWorkspace(), ...result };
@@ -1768,7 +1768,7 @@ export function createConfiguratorToolDefinitions(
       const result = await bridge.call<Record<string, unknown>>(
         "measure",
         { from, to },
-        { signal: options?.signal },
+        { signal: options?.signal, trackActivity: false },
       );
       assertTwinRevision(state.domain.revision, toolName);
       return { ok: true, revision: state.domain.revision, ...result };
@@ -1815,6 +1815,9 @@ async function registerTools(
       await surface.context.registerTool(tool, { signal: controller.signal });
       controller.signal.throwIfAborted();
       registeredToolNames.push(tool.name as ConfiguratorToolName);
+    }
+    if (controller.signal.aborted || registrationController !== controller) {
+      return { state: "unsupported", toolNames: [] };
     }
     registeredApi = surface.api;
     const status = {
