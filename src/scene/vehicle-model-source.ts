@@ -31,6 +31,7 @@ export interface VehicleModelProps {
   interior?: LiveVehicleInterior;
   focus: LiveVehicleFocus;
   mode: LiveVehicleRenderMode;
+  reducedMotion?: boolean;
   /**
    * 0 shut, 1 fully open. Only bodies that declare `hasOpenableBody` respond;
    * the rest ignore it, so the viewport can pass it unconditionally.
@@ -109,7 +110,7 @@ export const VEHICLE_MODEL_SOURCES: Record<VehicleModelSourceId, VehicleModelSou
   "r2-engineering": {
     id: "r2-engineering",
     label: "R2 engineering body",
-    sceneTitle: "Rivian R2 · code-native body",
+    sceneTitle: "Hudian RX2",
     hotspotBasis: "the code-native R2 body",
     credit: {
       // "General-arrangement drawing" reads as a manufacturer engineering
@@ -118,7 +119,7 @@ export const VEHICLE_MODEL_SOURCES: Record<VehicleModelSourceId, VehicleModelSou
       // and more honest claim.
       text: "Model: generated in code from published R2 dimensions · A. Carpenter",
     },
-    attribution: "Code-native R2 · fitted to published dimensions, not a scan",
+    attribution: "AUTOLAB",
     hasOpenableBody: true,
     hasCabin: true,
     cameraRig: "r2",

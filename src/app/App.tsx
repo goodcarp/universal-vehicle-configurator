@@ -18,6 +18,7 @@ import {
 import { AgentActivity } from "./AgentActivity";
 import { IncentiveSummary } from "./IncentiveSummary";
 import { ToolStatus } from "./ToolStatus";
+import { ToolActivityStrip } from "./ToolActivityStrip";
 import {
   applyShareStateToHistory,
   bindShareStatePopstate,
@@ -252,7 +253,7 @@ export function App() {
   ];
 
   const twinContext = useMemo(() => ({
-    build: buildOption?.label ?? "Rivian R2",
+    build: buildOption?.label ?? "Hudian RX2",
     paint: paintOption?.label ?? paint.label,
     wheels: wheelOption?.label ?? wheel.label,
     interior: interiorOption?.label ?? interior.label,
@@ -327,7 +328,7 @@ export function App() {
             </button>
           </nav>
           <div className="configurator-header__model">
-            <span>R2 / {workspace === "configure" ? "Build" : "Digital twin"}</span>
+            <span>RX2 / {workspace === "configure" ? "Build" : "Digital twin"}</span>
             <strong>{shortBuildLabel(buildOption)}</strong>
             <span>Rev {revision}</span>
           </div>
@@ -354,6 +355,8 @@ export function App() {
           <ToolStatus status={siteTools} />
         </div>
       </header>
+
+      <ToolActivityStrip />
 
       <div className="autolab-surfaces">
         <section
@@ -512,7 +515,7 @@ export function App() {
             <header>
               <div>
                 <span>Configuration / Rev {revision}</span>
-                <h2 id="review-title">Review your R2</h2>
+                <h2 id="review-title">Review your RX2</h2>
               </div>
               <button type="button" onClick={() => setReviewOpen(false)} aria-label="Close build review">
                 <X aria-hidden="true" />

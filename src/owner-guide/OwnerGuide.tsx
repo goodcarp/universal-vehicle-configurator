@@ -18,7 +18,8 @@ export function OwnerGuide({ active, context }: OwnerGuideProps) {
 
   const sync = useCallback(async () => {
     try {
-      await ownerGuideBridge.syncContext(context);
+      // The page keeping its own twin in step is not agent activity; only tool calls are.
+      await ownerGuideBridge.syncContext(context, { trackActivity: false });
     } catch {
       // The iframe may still be in its first module load. Its onLoad handler
       // performs the same sync once the drawing has installed its bridge.
@@ -88,7 +89,7 @@ export function OwnerGuide({ active, context }: OwnerGuideProps) {
           ref={frameRef}
           className="owner-guide__frame"
           src={`${import.meta.env.BASE_URL}garage/`}
-          title="R2 interactive digital twin and owner guide"
+          title="RX2 interactive digital twin and owner guide"
           tabIndex={active ? 0 : -1}
           onLoad={() => {
             // The load event only says the document arrived. It does not say
